@@ -11,6 +11,8 @@ const {
   ChannelType,
   PermissionsBitField,
   SlashCommandBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 
@@ -214,26 +216,36 @@ client.on("interactionCreate", async (interaction) => {
           ],
         });
 
+        const closeButton = new ButtonBuilder()
+          .setCustomId("close_ticket_btn")
+          .setLabel("Close Ticket")
+          .setStyle(ButtonStyle.Danger);
+        const closeRow = new ActionRowBuilder().addComponents(closeButton);
+
         await interaction.reply({
           content: `Your ticket has been created: ${channel}`,
           ephemeral: true,
         });
 
         if (selection === "support") {
-          await channel.send(
-            `Welcome ${interaction.user}! <@&${adminRoleId}> will be with you shortly.\n\nPlease describe your issue in detail.`
-          );
+          await channel.send({
+            content: `Welcome ${interaction.user}! <@&1532481208490131651> or <@&1532481208490131652> will be with you shortly.\n\nPlease describe your issue in detail.`,
+            components: [closeRow]
+          });
         } else if (selection === "robux") {
           const robuxEmbed = new EmbedBuilder()
             .setColor(0x00ff00)
-            .setTitle("Buy Credits with Robux")
+            .setTitle("Buy Credits/Premium with Robux")
             .setDescription(
               "Thank you for your interest! Please select the package you wish to purchase below.\n\n" +
               "*(Prices are calculated based on Roblox DevEx rates after the 30% marketplace fee)*\n\n" +
               "**Pricing:**\n" +
               "• 10 Credits: 1,100 Robux\n" +
               "• 40 Credits (Starter): 4,100 Robux\n" +
-              "• 90 Credits (Developer): 9,200 Robux"
+              "• 90 Credits (Developer): 9,200 Robux\n" +
+              "• 1 Month Premium: 1,200 Robux\n" +
+              "• 3 Months Premium: 3,600 Robux\n" +
+              "• 6 Months Premium: 7,200 Robux"
             );
 
           const robuxSelect = new StringSelectMenuBuilder()
@@ -242,11 +254,14 @@ client.on("interactionCreate", async (interaction) => {
             .addOptions(
               new StringSelectMenuOptionBuilder().setLabel("10 Credits (1,100 R$)").setValue("pkg_10c"),
               new StringSelectMenuOptionBuilder().setLabel("40 Credits (4,100 R$)").setValue("pkg_40c"),
-              new StringSelectMenuOptionBuilder().setLabel("90 Credits (9,200 R$)").setValue("pkg_90c")
+              new StringSelectMenuOptionBuilder().setLabel("90 Credits (9,200 R$)").setValue("pkg_90c"),
+              new StringSelectMenuOptionBuilder().setLabel("1 Month Premium (1,200 R$)").setValue("pkg_1m"),
+              new StringSelectMenuOptionBuilder().setLabel("3 Months Premium (3,600 R$)").setValue("pkg_3m"),
+              new StringSelectMenuOptionBuilder().setLabel("6 Months Premium (7,200 R$)").setValue("pkg_6m")
             );
 
           const robuxRow = new ActionRowBuilder().addComponents(robuxSelect);
-          await channel.send({ content: `${interaction.user} | <@&1532481208490131651> <@&1532481208490131652>`, embeds: [robuxEmbed], components: [robuxRow] });
+          await channel.send({ content: `${interaction.user} | <@&1532481208490131651> <@&1532481208490131652>`, embeds: [robuxEmbed], components: [robuxRow, closeRow] });
         }
       } catch (err) {
         console.error("Error creating ticket channel:", err);
@@ -260,6 +275,9 @@ client.on("interactionCreate", async (interaction) => {
         pkg_10c: { name: "10 Credits for 1,100 Robux", link: "YOUR_GAMEPASS_LINK_HERE_10C" },
         pkg_40c: { name: "40 Credits for 4,100 Robux", link: "YOUR_GAMEPASS_LINK_HERE_40C" },
         pkg_90c: { name: "90 Credits for 9,200 Robux", link: "YOUR_GAMEPASS_LINK_HERE_90C" },
+        pkg_1m: { name: "1 Month Premium for 1,200 Robux", link: "YOUR_GAMEPASS_LINK_HERE_1M" },
+        pkg_3m: { name: "3 Months Premium for 3,600 Robux", link: "YOUR_GAMEPASS_LINK_HERE_3M" },
+        pkg_6m: { name: "6 Months Premium for 7,200 Robux", link: "YOUR_GAMEPASS_LINK_HERE_6M" },
       };
 
       const selected = packageMap[pkg];
@@ -267,11 +285,29 @@ client.on("interactionCreate", async (interaction) => {
       await interaction.update({ components: [] }); // Remove the dropdown
       await interaction.followUp(
         `Great! You have selected **${selected.name}**.\n\n` +
-        `**Step 1:** Please reply with the **Email Address** linked to your YetiThumbs account.\n` +
+        `**Step 1:** Please reply with the **Email Address** linked to your YetiThumbs account, AND your **Roblox Username**.\n` +
         `**Step 2:** Purchase the item here: ${selected.link}\n` +
         `**Step 3:** Send a **screenshot of your completed purchase** here in this channel.\n` +
         `\nOnce you've done that, <@&1532481208490131651> or <@&1532481208490131652> will verify the purchase and manually grant your account the items!`
       );
+    }
+  }
+
+  // Buttons
+  if (interaction.isButton()) {
+    if (interaction.customId === "close_ticket_btn") {
+      // Check if user has admin role
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      if (
+        !member.roles.cache.has("1532481208490131651") &&
+        !member.roles.cache.has("1532481208490131652") &&
+        !member.permissions.has(PermissionsBitField.Flags.Administrator)
+      ) {
+        return interaction.reply({ content: "Only administrators can close tickets.", ephemeral: true });
+      }
+
+      await interaction.reply("Closing ticket in 5 seconds...");
+      setTimeout(() => interaction.channel.delete().catch(console.error), 5000);
     }
   }
 });
