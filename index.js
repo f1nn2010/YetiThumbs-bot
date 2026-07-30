@@ -197,8 +197,14 @@ client.on("interactionCreate", async (interaction) => {
       const categoryName = selection === "support" ? "Support" : "Robux Purchase";
 
       try {
+        // Calculate the next ticket number dynamically
+        const existingTickets = interaction.guild.channels.cache
+          .filter(c => c.name.startsWith("ticket-"))
+          .map(c => parseInt(c.name.replace("ticket-", "")) || 0);
+        const nextTicketId = existingTickets.length > 0 ? Math.max(...existingTickets) + 1 : 1;
+
         const channel = await interaction.guild.channels.create({
-          name: `ticket-${ticketCounter++}`,
+          name: `ticket-${nextTicketId}`,
           type: ChannelType.GuildText,
           permissionOverwrites: [
             {
