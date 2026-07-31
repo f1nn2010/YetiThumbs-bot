@@ -51,11 +51,14 @@ export default {
             } else if (selection === "robux") {
                 const robuxEmbed = new EmbedBuilder()
                     .setColor(0x00ff00)
-                    .setTitle("Buy Credits/Premium with Robux")
+                    .setTitle("Buy Credits/Premium")
                     .setDescription(
-                        "Thank you for your interest! Please select the package you wish to purchase below.\n\n" +
+                        "**Want to pay with Real Money (Card/PayPal)?**\n" +
+                        "Head over to our website: https://yetithumbs.com/pricing\n\n" +
+                        "**Want to pay with Robux?**\n" +
+                        "Please select the package you wish to purchase below.\n" +
                         "*(Prices are calculated based on Roblox DevEx rates after the 30% marketplace fee)*\n\n" +
-                        "**Pricing:**\n" +
+                        "**Robux Pricing:**\n" +
                         "• 10 Credits: 1,100 Robux\n" +
                         "• 40 Credits (Starter): 4,100 Robux\n" +
                         "• 90 Credits (Developer): 9,200 Robux\n" +
