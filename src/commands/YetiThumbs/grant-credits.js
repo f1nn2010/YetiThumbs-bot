@@ -1,8 +1,6 @@
 import { SlashCommandBuilder, PermissionsBitField } from 'discord.js';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
 export default {
     data: new SlashCommandBuilder()
         .setName('grant-credits')
@@ -19,6 +17,7 @@ export default {
         await interaction.deferReply({ ephemeral: true });
 
         try {
+            const supabase = createClient(process.env.SUPABASE_URL?.trim(), process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
             const email = interaction.options.getString('email');
             const amount = interaction.options.getInteger('amount');
 
