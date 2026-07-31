@@ -1,83 +1,120 @@
-import { SlashCommandBuilder, PermissionsBitField } from 'discord.js';
-import { createClient } from '@supabase/supabase-js';
+import { SlashCommandBuilder, PermissionsBitField } from "discord.js";
+import {
+  getSupabaseAdmin,
+  findAuthUserByEmail,
+  ensureEphemeralDeferred,
+  replyEphemeral,
+} from "../../utils/supabaseAdmin.js";
 
 export default {
-    data: new SlashCommandBuilder()
-        .setName('grant-credits')
-        .setDescription('Grant credits to a YetiThumbs user via email (Admin Only)')
-        .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-        .addStringOption((option) =>
-            option.setName('email').setDescription("User's email").setRequired(true)
-        )
-        .addIntegerOption((option) =>
-            option.setName('amount').setDescription("Amount of credits").setRequired(true)
-        ),
+  data: new SlashCommandBuilder()
+    .setName("grant-credits")
+    .setDescription("Grant credits to a YetiThumbs user via email (Admin Only)")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption((option) =>
+      option.setName("email").setDescription("User's email").setRequired(true)
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("amount")
+        .setDescription("Amount of credits")
+        .setRequired(true)
+        .setMinValue(1)
+        .setMaxValue(100000)
+    ),
 
-    async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+  async execute(interaction) {
+    await ensureEphemeralDeferred(interaction);
 
-        try {
-            const rawUrl = process.env.SUPABASE_URL?.trim();
-            const supabaseUrl = rawUrl ? new URL(rawUrl).origin : undefined;
-            const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
-            const email = interaction.options.getString('email');
-            const amount = interaction.options.getInteger('amount');
+    try {
+      const supabase = getSupabaseAdmin();
+      const email = interaction.options.getString("email", true).trim();
+      const amount = interaction.options.getInteger("amount", true);
 
-            const { data: users, error: userError } = await supabase.auth.admin.listUsers();
-            if (userError) {
-                return interaction.editReply(`Error listing users (v2): ${userError.message}`);
-            }
+      const { user, error: userError } = await findAuthUserByEmail(
+        supabase,
+        email
+      );
+      if (userError) {
+        return replyEphemeral(
+          interaction,
+          `Error looking up users: ${userError.message}\n\nCheck that SUPABASE_URL is \`https://YOURPROJECT.supabase.co\` and SUPABASE_SERVICE_ROLE_KEY is the **service_role** key (not the anon/publishable key).`
+        );
+      }
+      if (!user) {
+        return replyEphemeral(
+          interaction,
+          `Could not find a YetiThumbs account with email **${email}**. They must sign up on the website first.`
+        );
+      }
 
-            const user = users.users.find((u) => u.email === email);
-            if (!user) {
-                return interaction.editReply(`Could not find a user with the email **${email}**.`);
-            }
+      // Primary table used by the website
+      const { data: profile, error: profileError } = await supabase
+        .from("yetithumbs_profiles")
+        .select("credits")
+        .eq("id", user.id)
+        .maybeSingle();
 
-            // Using yetithumbs_profiles per recent updates we made in the web app, but old index.js used 'users' and 'credits'
-            // The old bot code used 'users' table, wait. The yetithumbs web app uses 'yetithumbs_profiles'.
-            // Let's use yetithumbs_profiles for consistency.
-            const { data: userData, error: fetchError } = await supabase
-                .from('yetithumbs_profiles')
-                .select('credits')
-                .eq('id', user.id)
-                .single();
+      if (profileError && profileError.code !== "PGRST116") {
+        // Fallback to legacy `users` table if profiles missing
+        const { data: legacy, error: legacyFetchError } = await supabase
+          .from("users")
+          .select("credits")
+          .eq("id", user.id)
+          .maybeSingle();
 
-            let currentCredits = userData?.credits ?? 0;
-            if (fetchError && fetchError.code !== 'PGRST116') {
-                // If it fails for something other than not found, we use 'users' table as fallback just in case
-                const { data: oldUserData, error: oldFetchError } = await supabase
-                    .from('users')
-                    .select('credits')
-                    .eq('id', user.id)
-                    .single();
-                currentCredits = oldUserData?.credits ?? 0;
-                
-                if (oldFetchError && oldFetchError.code !== 'PGRST116') {
-                    return interaction.editReply(`Error fetching user data: ${oldFetchError.message}`);
-                }
-                
-                const { error: updateError } = await supabase
-                    .from('users')
-                    .upsert({ id: user.id, credits: currentCredits + amount });
-
-                if (updateError) {
-                    return interaction.editReply(`Error granting credits: ${updateError.message}`);
-                }
-            } else {
-                const { error: updateError } = await supabase
-                    .from('yetithumbs_profiles')
-                    .update({ credits: currentCredits + amount })
-                    .eq('id', user.id);
-
-                if (updateError) {
-                    return interaction.editReply(`Error granting credits: ${updateError.message}`);
-                }
-            }
-
-            await interaction.editReply(`Successfully granted **${amount} credits** to **${email}**.`);
-        } catch (error) {
-            console.error('Error in grant-credits command:', error);
-            await interaction.editReply('An unexpected error occurred while granting credits.');
+        if (legacyFetchError && legacyFetchError.code !== "PGRST116") {
+          return replyEphemeral(
+            interaction,
+            `Error reading profile: ${profileError.message}`
+          );
         }
+
+        const current = legacy?.credits ?? 0;
+        const { error: legacyUpdateError } = await supabase
+          .from("users")
+          .upsert({ id: user.id, credits: current + amount });
+
+        if (legacyUpdateError) {
+          return replyEphemeral(
+            interaction,
+            `Error granting credits: ${legacyUpdateError.message}`
+          );
+        }
+      } else {
+        const current = profile?.credits ?? 0;
+        const { error: updateError } = await supabase
+          .from("yetithumbs_profiles")
+          .upsert(
+            {
+              id: user.id,
+              email: user.email,
+              credits: current + amount,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" }
+          );
+
+        if (updateError) {
+          return replyEphemeral(
+            interaction,
+            `Error granting credits: ${updateError.message}`
+          );
+        }
+      }
+
+      return replyEphemeral(
+        interaction,
+        `Granted **${amount} credits** to **${email}**.`
+      );
+    } catch (error) {
+      console.error("Error in grant-credits command:", error);
+      return replyEphemeral(
+        interaction,
+        error?.code === "SUPABASE_CONFIG"
+          ? error.message
+          : `Unexpected error granting credits: ${error.message}`
+      );
     }
+  },
 };

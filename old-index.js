@@ -1,4 +1,5 @@
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const {
   Client,
   GatewayIntentBits,
@@ -16,21 +17,42 @@ const {
 } = require("discord.js");
 const { createClient } = require("@supabase/supabase-js");
 
-// Environment Variables
-const token = process.env.DISCORD_TOKEN;
-const clientId = process.env.DISCORD_CLIENT_ID;
-const guildId = process.env.DISCORD_GUILD_ID;
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Environment Variables (accept both CLIENT_ID and DISCORD_CLIENT_ID names)
+const token = process.env.DISCORD_TOKEN || process.env.TOKEN;
+const clientId = process.env.CLIENT_ID || process.env.DISCORD_CLIENT_ID;
+const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
+const rawSupabaseUrl = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || "").trim();
 const adminRoleId = process.env.DISCORD_ADMIN_ROLE_ID;
+
+function resolveSupabaseUrl(raw) {
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+const supabaseUrl = resolveSupabaseUrl(rawSupabaseUrl);
 
 if (!token || !clientId || !guildId || !supabaseUrl || !supabaseServiceKey || !adminRoleId) {
   console.error("Missing required environment variables. Please check your .env file.");
+  console.error({
+    hasToken: !!token,
+    hasClientId: !!clientId,
+    hasGuildId: !!guildId,
+    hasSupabaseUrl: !!supabaseUrl,
+    hasServiceKey: !!supabaseServiceKey,
+    hasAdminRole: !!adminRoleId,
+  });
   process.exit(1);
 }
 
-// Initialize Supabase
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Initialize Supabase (origin-only URL avoids "Invalid path specified in request URL")
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 
 // Initialize Discord Client
 const client = new Client({
@@ -129,30 +151,40 @@ client.on("interactionCreate", async (interaction) => {
       const amount = interaction.options.getInteger("amount");
       await interaction.deferReply({ ephemeral: true });
 
-      const { data: users, error: userError } = await supabase.auth.admin.listUsers();
+      const { data: listed, error: userError } = await supabase.auth.admin.listUsers({
+        page: 1,
+        perPage: 200,
+      });
       if (userError) {
-         return interaction.editReply(`Error listing users: ${userError.message}`);
+        return interaction.editReply(
+          `Error listing users: ${userError.message}\n\nCheck SUPABASE_URL (https://xxxx.supabase.co) and service_role key.`
+        );
       }
-      
-      const user = users.users.find(u => u.email === email);
+
+      const target = String(email || "").toLowerCase();
+      const user = listed.users.find((u) => (u.email || "").toLowerCase() === target);
       if (!user) {
-        return interaction.editReply(`Could not find a user with the email **${email}**.`);
+        return interaction.editReply(
+          `Could not find a YetiThumbs account with email **${email}**. They must sign up on the website first.`
+        );
       }
 
-      const { data: userData, error: fetchError } = await supabase
-        .from('users')
-        .select('credits')
-        .eq('id', user.id)
-        .single();
-        
-      let currentCredits = userData?.credits ?? 0;
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        return interaction.editReply(`Error fetching user data: ${fetchError.message}`);
-      }
+      const { data: profile } = await supabase
+        .from("yetithumbs_profiles")
+        .select("credits")
+        .eq("id", user.id)
+        .maybeSingle();
 
-      const { error: updateError } = await supabase
-        .from('users')
-        .upsert({ id: user.id, credits: currentCredits + amount });
+      const currentCredits = profile?.credits ?? 0;
+      const { error: updateError } = await supabase.from("yetithumbs_profiles").upsert(
+        {
+          id: user.id,
+          email: user.email,
+          credits: currentCredits + amount,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
 
       if (updateError) {
         return interaction.editReply(`Error granting credits: ${updateError.message}`);
@@ -166,19 +198,42 @@ client.on("interactionCreate", async (interaction) => {
       const months = interaction.options.getInteger("months");
       await interaction.deferReply({ ephemeral: true });
 
-      const { data: users, error: userError } = await supabase.auth.admin.listUsers();
-      if (userError) return interaction.editReply(`Error listing users: ${userError.message}`);
-      
-      const user = users.users.find(u => u.email === email);
-      if (!user) return interaction.editReply(`Could not find a user with the email **${email}**.`);
+      const { data: listed, error: userError } = await supabase.auth.admin.listUsers({
+        page: 1,
+        perPage: 200,
+      });
+      if (userError) {
+        return interaction.editReply(
+          `Error listing users: ${userError.message}\n\nCheck SUPABASE_URL (https://xxxx.supabase.co) and service_role key.`
+        );
+      }
 
-      const { error: updateError } = await supabase
-        .from('users')
-        .upsert({ id: user.id, tier: 'pro' });
+      const target = String(email || "").toLowerCase();
+      const user = listed.users.find((u) => (u.email || "").toLowerCase() === target);
+      if (!user) {
+        return interaction.editReply(
+          `Could not find a YetiThumbs account with email **${email}**. They must sign up on the website first.`
+        );
+      }
 
-      if (updateError) return interaction.editReply(`Error granting premium: ${updateError.message}`);
+      const { error: updateError } = await supabase.from("yetithumbs_profiles").upsert(
+        {
+          id: user.id,
+          email: user.email,
+          plan: "developer",
+          credits: 90,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" }
+      );
 
-      await interaction.editReply(`Successfully granted **Premium** to **${email}** for ${months} months.`);
+      if (updateError) {
+        return interaction.editReply(`Error granting premium: ${updateError.message}`);
+      }
+
+      await interaction.editReply(
+        `Successfully granted **developer** plan to **${email}** for ${months} month(s).`
+      );
     }
 
     if (commandName === "close-ticket") {
