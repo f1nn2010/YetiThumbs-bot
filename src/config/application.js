@@ -21,7 +21,7 @@ const appConfig = {
   bot: {
     ...botConfig,
     token: process.env.DISCORD_TOKEN || process.env.TOKEN,
-    clientId: process.env.CLIENT_ID,
+    clientId: process.env.CLIENT_ID || process.env.DISCORD_CLIENT_ID,
     // Retained for tutorial/setup compatibility; not used for command registration.
     guildId: process.env.GUILD_ID,
 

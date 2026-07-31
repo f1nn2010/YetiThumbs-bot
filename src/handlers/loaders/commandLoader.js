@@ -265,7 +265,7 @@ async function registerGlobalCommands(client, clientId, commands, totalSubcomman
 
 export async function registerCommands(client, options = {}) {
     const { clientId = null } = options;
-    const guildId = process.env.GUILD_ID;
+    const guildId = process.env.GUILD_ID || process.env.DISCORD_GUILD_ID;
 
     try {
         const { commands, totalSubcommands } = collectCommandPayloads(client);
