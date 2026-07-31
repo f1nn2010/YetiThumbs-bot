@@ -265,10 +265,24 @@ async function registerGlobalCommands(client, clientId, commands, totalSubcomman
 
 export async function registerCommands(client, options = {}) {
     const { clientId = null } = options;
+    const guildId = process.env.GUILD_ID;
 
     try {
         const { commands, totalSubcommands } = collectCommandPayloads(client);
-        await registerGlobalCommands(client, clientId, commands, totalSubcommands);
+        
+        logger.info('Validating commands before registration...');
+        validateCommands(commands);
+        logger.info('Command validation passed');
+        
+        const commandsToRegister = prepareCommandsForRegistration(commands);
+        
+        if (guildId) {
+            logger.info(`Registering ${commandsToRegister.length} commands to guild ${guildId}...`);
+            await client.rest.put(`/applications/${clientId}/guilds/${guildId}/commands`, { body: commandsToRegister });
+            logger.info(`Successfully registered ${commandsToRegister.length} commands to guild ${guildId}`);
+        } else {
+            await registerGlobalCommands(client, clientId, commands, totalSubcommands);
+        }
     } catch (error) {
         logger.error('Error registering commands:', error);
         throw error;
