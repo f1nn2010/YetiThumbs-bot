@@ -17,7 +17,9 @@ export default {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            const supabase = createClient(process.env.SUPABASE_URL?.trim(), process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+            const rawUrl = process.env.SUPABASE_URL?.trim();
+            const supabaseUrl = rawUrl ? new URL(rawUrl).origin : undefined;
+            const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY?.trim());
             const email = interaction.options.getString('email');
             const amount = interaction.options.getInteger('amount');
 
