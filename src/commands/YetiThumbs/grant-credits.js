@@ -25,7 +25,7 @@ export default {
 
             const { data: users, error: userError } = await supabase.auth.admin.listUsers();
             if (userError) {
-                return interaction.editReply(`Error listing users: ${userError.message}`);
+                return interaction.editReply(`Error listing users (v2): ${userError.message}`);
             }
 
             const user = users.users.find((u) => u.email === email);
