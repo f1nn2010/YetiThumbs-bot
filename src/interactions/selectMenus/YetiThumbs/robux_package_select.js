@@ -6,12 +6,12 @@ export default {
         try {
             const pkg = interaction.values[0];
             const packageMap = {
-                pkg_10c: { name: "10 Credits for 1,100 Robux", link: "YOUR_GAMEPASS_LINK_HERE_10C" },
-                pkg_40c: { name: "40 Credits for 4,100 Robux", link: "YOUR_GAMEPASS_LINK_HERE_40C" },
-                pkg_90c: { name: "90 Credits for 9,200 Robux", link: "YOUR_GAMEPASS_LINK_HERE_90C" },
-                pkg_1m: { name: "1 Month Premium for 1,200 Robux", link: "YOUR_GAMEPASS_LINK_HERE_1M" },
-                pkg_3m: { name: "3 Months Premium for 3,600 Robux", link: "YOUR_GAMEPASS_LINK_HERE_3M" },
-                pkg_6m: { name: "6 Months Premium for 7,200 Robux", link: "YOUR_GAMEPASS_LINK_HERE_6M" },
+                pkg_10c: { name: "10 Credits for 1,100 Robux", link: process.env.ROBUX_LINK_10C || "[Missing Link: Server owner must configure ROBUX_LINK_10C]" },
+                pkg_40c: { name: "40 Credits for 4,100 Robux", link: process.env.ROBUX_LINK_40C || "[Missing Link: Server owner must configure ROBUX_LINK_40C]" },
+                pkg_90c: { name: "90 Credits for 9,200 Robux", link: process.env.ROBUX_LINK_90C || "[Missing Link: Server owner must configure ROBUX_LINK_90C]" },
+                pkg_1m: { name: "1 Month Premium for 1,200 Robux", link: process.env.ROBUX_LINK_1M || "[Missing Link: Server owner must configure ROBUX_LINK_1M]" },
+                pkg_3m: { name: "3 Months Premium for 3,600 Robux", link: process.env.ROBUX_LINK_3M || "[Missing Link: Server owner must configure ROBUX_LINK_3M]" },
+                pkg_6m: { name: "6 Months Premium for 7,200 Robux", link: process.env.ROBUX_LINK_6M || "[Missing Link: Server owner must configure ROBUX_LINK_6M]" },
             };
 
             const selected = packageMap[pkg];
