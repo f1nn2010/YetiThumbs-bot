@@ -13,23 +13,28 @@ export default {
                 .map(c => parseInt(c.name.replace("ticket-", "")) || 0);
             const nextTicketId = existingTickets.length > 0 ? Math.max(...existingTickets) + 1 : 1;
 
+            const permissionOverwrites = [
+                {
+                    id: interaction.guild.id,
+                    deny: [PermissionsBitField.Flags.ViewChannel],
+                },
+                {
+                    id: interaction.user.id,
+                    allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+                },
+            ];
+
+            if (adminRoleId) {
+                permissionOverwrites.push({
+                    id: adminRoleId,
+                    allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
+                });
+            }
+
             const channel = await interaction.guild.channels.create({
                 name: `ticket-${nextTicketId}`,
                 type: ChannelType.GuildText,
-                permissionOverwrites: [
-                    {
-                        id: interaction.guild.id,
-                        deny: [PermissionsBitField.Flags.ViewChannel],
-                    },
-                    {
-                        id: interaction.user.id,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                    },
-                    {
-                        id: adminRoleId,
-                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages],
-                    },
-                ],
+                permissionOverwrites,
             });
 
             const closeButton = new ButtonBuilder()
@@ -45,7 +50,7 @@ export default {
 
             if (selection === "support") {
                 await channel.send({
-                    content: `Welcome ${interaction.user}! <@&${adminRoleId}> will be with you shortly.\n\nPlease describe your issue in detail.`,
+                    content: `Welcome ${interaction.user}! ${adminRoleId ? `<@&${adminRoleId}> ` : "Staff "}will be with you shortly.\n\nPlease describe your issue in detail.`,
                     components: [closeRow]
                 });
             } else if (selection === "robux") {
@@ -80,7 +85,7 @@ export default {
                     );
 
                 const robuxRow = new ActionRowBuilder().addComponents(robuxSelect);
-                await channel.send({ content: `${interaction.user} | <@&${adminRoleId}>`, embeds: [robuxEmbed], components: [robuxRow, closeRow] });
+                await channel.send({ content: `${interaction.user} ${adminRoleId ? `| <@&${adminRoleId}>` : ""}`, embeds: [robuxEmbed], components: [robuxRow, closeRow] });
             }
         } catch (err) {
             logger.error("Error creating ticket channel:", err);

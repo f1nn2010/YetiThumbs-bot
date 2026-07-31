@@ -22,7 +22,7 @@ export default {
                 `**Step 1:** Please reply with the **Email Address** linked to your YetiThumbs account, AND your **Roblox Username**.\n` +
                 `**Step 2:** Purchase the item here: ${selected.link}\n` +
                 `**Step 3:** Send a **screenshot of your completed purchase** here in this channel.\n` +
-                `\nOnce you've done that, <@&${process.env.DISCORD_ADMIN_ROLE_ID}> will verify the purchase and manually grant your account the items!`
+                `\nOnce you've done that, ${process.env.DISCORD_ADMIN_ROLE_ID ? `<@&${process.env.DISCORD_ADMIN_ROLE_ID}>` : "our staff"} will verify the purchase and manually grant your account the items!`
             );
         } catch (err) {
             logger.error("Error handling robux package select:", err);
