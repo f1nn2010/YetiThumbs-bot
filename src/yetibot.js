@@ -1,545 +1,450 @@
-/**
- * YetiThumbs Discord bot — simple, reliable entrypoint.
- * Tickets + grant-credits + grant-premium. No TitanBot/Postgres/music stack.
- */
-import path from "path";
-import { fileURLToPath } from "url";
-import dotenv from "dotenv";
+import { createServer } from "node:http";
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelType,
   Client,
+  EmbedBuilder,
+  Events,
   GatewayIntentBits,
-  Partials,
+  MessageFlags,
+  PermissionFlagsBits,
   REST,
   Routes,
   SlashCommandBuilder,
-  PermissionFlagsBits,
-  ChannelType,
-  EmbedBuilder,
-  ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  MessageFlags,
 } from "discord.js";
-import { createClient } from "@supabase/supabase-js";
+import { loadConfig } from "./config.js";
+import {
+  isTicketForUser,
+  nextTicketNumber,
+  ticketTopic,
+} from "./domain.js";
+import { deferEphemeral, respondEphemeral } from "./responses.js";
+import { createYetiService } from "./yetiService.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, "../.env") });
-
-function clean(v) {
-  return String(v ?? "")
-    .trim()
-    .replace(/^\uFEFF/, "")
-    .replace(/^["']|["']$/g, "");
-}
-
-function requireEnv(name, ...alts) {
-  for (const key of [name, ...alts]) {
-    const v = clean(process.env[key]);
-    if (v) return v;
-  }
-  return "";
-}
-
-function resolveSupabaseUrl() {
-  const raw = requireEnv("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL");
-  if (!raw) return "";
-  try {
-    return new URL(raw).origin;
-  } catch {
-    return "";
-  }
-}
-
-const TOKEN = requireEnv("DISCORD_TOKEN", "TOKEN");
-const CLIENT_ID = requireEnv("CLIENT_ID", "DISCORD_CLIENT_ID");
-const GUILD_ID = requireEnv("GUILD_ID", "DISCORD_GUILD_ID");
-const ADMIN_ROLE_ID = requireEnv("DISCORD_ADMIN_ROLE_ID");
-const OWNER_IDS = clean(process.env.OWNER_IDS)
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
-const SUPABASE_URL = resolveSupabaseUrl();
-const SUPABASE_KEY = requireEnv(
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "SUPABASE_SECRET_KEY"
-);
-
-const PREMIUM_PLAN = "developer";
-const PREMIUM_CREDITS = 90;
-
-const missing = [];
-if (!TOKEN) missing.push("DISCORD_TOKEN");
-if (!CLIENT_ID) missing.push("CLIENT_ID");
-if (!SUPABASE_URL) missing.push("SUPABASE_URL");
-if (!SUPABASE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
-if (missing.length) {
-  console.error("Missing env:", missing.join(", "));
-  process.exit(1);
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
-  partials: [Partials.Channel],
-});
+const config = loadConfig();
+const yeti = createYetiService(config);
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const ticketLocks = new Map();
+let ready = false;
 
 const commands = [
   new SlashCommandBuilder()
     .setName("setup-tickets")
-    .setDescription("Post the YetiThumbs ticket panel (Admin)")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .toJSON(),
+    .setDescription("Post the YetiThumbs support and Robux ticket panel")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
     .setName("grant-credits")
-    .setDescription("Grant credits to a YetiThumbs user by email (Admin)")
+    .setDescription("Grant credits to a YetiThumbs account by email")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption((o) =>
-      o.setName("email").setDescription("Account email").setRequired(true)
+    .addStringOption((option) =>
+      option.setName("email").setDescription("Account email").setRequired(true),
     )
-    .addIntegerOption((o) =>
-      o
+    .addIntegerOption((option) =>
+      option
         .setName("amount")
         .setDescription("Credits to add")
         .setRequired(true)
         .setMinValue(1)
-        .setMaxValue(100000)
-    )
-    .toJSON(),
+        .setMaxValue(100000),
+    ),
   new SlashCommandBuilder()
     .setName("grant-premium")
-    .setDescription("Grant Developer plan to a YetiThumbs user by email (Admin)")
+    .setDescription("Grant the Developer plan to an account by email")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption((o) =>
-      o.setName("email").setDescription("Account email").setRequired(true)
+    .addStringOption((option) =>
+      option.setName("email").setDescription("Account email").setRequired(true),
     )
-    .addIntegerOption((o) =>
-      o
+    .addIntegerOption((option) =>
+      option
         .setName("months")
-        .setDescription("Duration in months")
+        .setDescription("Premium duration in months")
         .setRequired(true)
         .setMinValue(1)
-        .setMaxValue(36)
-    )
-    .toJSON(),
-];
-
-async function registerCommands() {
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
-  if (GUILD_ID) {
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), {
-      body: commands,
-    });
-    console.log(`Registered ${commands.length} guild commands → ${GUILD_ID}`);
-  } else {
-    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-    console.log(`Registered ${commands.length} global commands`);
-  }
-}
-
-async function safeDefer(interaction) {
-  if (interaction.deferred || interaction.replied) return;
-  try {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  } catch (err) {
-    // Already acknowledged by Discord — continue with editReply if possible
-    if (err?.code !== 40060 && err?.code !== 10062) throw err;
-  }
-}
-
-async function safeEdit(interaction, content) {
-  const payload =
-    typeof content === "string" ? { content } : content;
-  try {
-    if (interaction.deferred || interaction.replied) {
-      return await interaction.editReply(payload);
-    }
-    return await interaction.reply({
-      ...payload,
-      flags: MessageFlags.Ephemeral,
-    });
-  } catch (err) {
-    console.error("safeEdit failed:", err.message);
-  }
-}
+        .setMaxValue(36),
+    ),
+].map((command) => command.toJSON());
 
 function isStaff(member) {
   if (!member) return false;
   if (member.permissions?.has?.(PermissionFlagsBits.Administrator)) return true;
-  if (OWNER_IDS.includes(member.id)) return true;
-  if (ADMIN_ROLE_ID && member.roles?.cache?.has?.(ADMIN_ROLE_ID)) return true;
-  // Hardcoded second admin role from original setup
-  if (member.roles?.cache?.has?.("1532481208490131652")) return true;
-  return false;
+  if (config.ownerIds.includes(member.id)) return true;
+  return config.staffRoleIds.some((id) => member.roles?.cache?.has?.(id));
 }
 
-async function findUserByEmail(email) {
-  const target = email.trim().toLowerCase();
-  for (let page = 1; page <= 20; page++) {
-    const { data, error } = await supabase.auth.admin.listUsers({
-      page,
-      perPage: 200,
-    });
-    if (error) return { user: null, error };
-    const hit = (data?.users || []).find(
-      (u) => (u.email || "").toLowerCase() === target
-    );
-    if (hit) return { user: hit, error: null };
-    if (!data?.users?.length || data.users.length < 200) break;
+function staffMention() {
+  return config.staffRoleIds.length
+    ? config.staffRoleIds.map((id) => `<@&${id}>`).join(" ")
+    : "Staff";
+}
+
+async function withTicketLock(guildId, operation) {
+  const previous = ticketLocks.get(guildId) ?? Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  ticketLocks.set(guildId, current);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (ticketLocks.get(guildId) === current) ticketLocks.delete(guildId);
   }
-  return { user: null, error: null };
 }
 
-async function grantCredits(email, amount) {
-  const { user, error } = await findUserByEmail(email);
-  if (error) throw new Error(`Auth lookup failed: ${error.message}`);
-  if (!user) throw new Error(`No YetiThumbs account for **${email}**. They must sign up first.`);
-
-  const { data: profile } = await supabase
-    .from("yetithumbs_profiles")
-    .select("credits")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const next = (profile?.credits ?? 0) + amount;
-  const { error: up } = await supabase.from("yetithumbs_profiles").upsert(
-    {
-      id: user.id,
-      email: user.email,
-      credits: next,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" }
-  );
-  if (up) throw new Error(`Profile update failed: ${up.message}`);
-  return { user, credits: next };
-}
-
-async function grantPremium(email, months) {
-  const { user, error } = await findUserByEmail(email);
-  if (error) throw new Error(`Auth lookup failed: ${error.message}`);
-  if (!user) throw new Error(`No YetiThumbs account for **${email}**. They must sign up first.`);
-
-  const { error: up } = await supabase.from("yetithumbs_profiles").upsert(
-    {
-      id: user.id,
-      email: user.email,
-      plan: PREMIUM_PLAN,
-      credits: PREMIUM_CREDITS,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" }
-  );
-  if (up) throw new Error(`Profile update failed: ${up.message}`);
-
-  const ends = new Date();
-  ends.setMonth(ends.getMonth() + months);
-  return { user, ends };
-}
-
-async function handleSetupTickets(interaction) {
-  const embed = new EmbedBuilder()
-    .setColor(0x33e6ff)
-    .setTitle("YetiThumbs Support & Robux")
-    .setDescription(
-      "Need help or want to buy credits/premium with Robux?\n\nSelect a category below to open a private ticket."
+async function registerCommands() {
+  const rest = new REST({ version: "10" }).setToken(config.token);
+  if (config.guildId) {
+    await rest.put(
+      Routes.applicationGuildCommands(config.clientId, config.guildId),
+      { body: commands },
     );
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId("ticket_select")
-    .setPlaceholder("Select a category...")
-    .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel("🛠️ Support")
-        .setDescription("Bugs, account help, questions")
-        .setValue("support"),
-      new StringSelectMenuOptionBuilder()
-        .setLabel("💎 Buy with Robux")
-        .setDescription("Credits or premium via Robux")
-        .setValue("robux")
-    );
-
-  await interaction.reply({
-    content: "Ticket panel posted.",
-    flags: MessageFlags.Ephemeral,
-  });
-  await interaction.channel.send({
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(select)],
-  });
-}
-
-async function handleTicketSelect(interaction) {
-  const selection = interaction.values[0];
-  const existing = interaction.guild.channels.cache
-    .filter((c) => c.name.startsWith("ticket-"))
-    .map((c) => parseInt(c.name.replace("ticket-", ""), 10) || 0);
-  const nextId = existing.length ? Math.max(...existing) + 1 : 1;
-
-  const overwrites = [
-    {
-      id: interaction.guild.id,
-      deny: [PermissionFlagsBits.ViewChannel],
-    },
-    {
-      id: interaction.user.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.AttachFiles,
-      ],
-    },
-  ];
-  if (ADMIN_ROLE_ID) {
-    overwrites.push({
-      id: ADMIN_ROLE_ID,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.ManageChannels,
-      ],
-    });
-  }
-
-  const channel = await interaction.guild.channels.create({
-    name: `ticket-${nextId}`,
-    type: ChannelType.GuildText,
-    permissionOverwrites: overwrites,
-    topic: `YetiThumbs ticket for ${interaction.user.tag} (${selection})`,
-  });
-
-  const closeBtn = new ButtonBuilder()
-    .setCustomId("close_ticket_btn")
-    .setLabel("Close ticket")
-    .setStyle(ButtonStyle.Danger);
-
-  await interaction.reply({
-    content: `Ticket created: ${channel}`,
-    flags: MessageFlags.Ephemeral,
-  });
-
-  if (selection === "support") {
-    await channel.send({
-      content: `Welcome ${interaction.user}! ${
-        ADMIN_ROLE_ID ? `<@&${ADMIN_ROLE_ID}>` : "Staff"
-      } will help shortly.\n\nPlease describe your issue and include your **YetiThumbs account email**.`,
-      components: [new ActionRowBuilder().addComponents(closeBtn)],
-    });
+    // Remove stale TitanBot global commands. Guild commands appear immediately.
+    await rest.put(Routes.applicationCommands(config.clientId), { body: [] });
+    console.log(`Registered ${commands.length} commands in guild ${config.guildId}`);
     return;
   }
 
-  const robuxEmbed = new EmbedBuilder()
-    .setColor(0x00ff88)
-    .setTitle("Buy credits / premium")
+  await rest.put(Routes.applicationCommands(config.clientId), { body: commands });
+  console.log(`Registered ${commands.length} global commands`);
+}
+
+async function setupTickets(interaction) {
+  if (!isStaff(interaction.member)) {
+    return respondEphemeral(interaction, "Only configured staff can post the ticket panel.");
+  }
+  if (!interaction.channel?.isTextBased?.()) {
+    return respondEphemeral(interaction, "Run this command in a text channel.");
+  }
+
+  const panel = new EmbedBuilder()
+    .setColor(0x39dcff)
+    .setTitle("YetiThumbs Support & Robux Purchases")
     .setDescription(
       [
-        "**Card / PayPal?** → https://yetithumbs.com/pricing",
+        "Need account help, found a bug, or want to pay with Robux?",
         "",
-        "**Robux?** Pick a package below.",
-        "Prices use DevEx rates after Roblox tax, rounded up.",
-        "",
-        "• 10 Credits — 1,100 R$",
-        "• 40 Credits (Starter) — 4,100 R$",
-        "• 90 Credits (Developer) — 9,200 R$",
-        "• 1 Month Premium — 1,200 R$",
-        "• 3 Months Premium — 3,600 R$",
-        "• 6 Months Premium — 7,200 R$",
-      ].join("\n")
-    );
+        "Choose a category below. The bot creates a private channel for you and the YetiThumbs team.",
+      ].join("\n"),
+    )
+    .setFooter({ text: "Never post passwords, tokens, or payment details." });
 
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId("robux_package_select")
-    .setPlaceholder("Select a package...")
+  const select = new StringSelectMenuBuilder()
+    .setCustomId("ticket_select")
+    .setPlaceholder("Choose a ticket type")
     .addOptions(
       new StringSelectMenuOptionBuilder()
-        .setLabel("10 Credits (1,100 R$)")
-        .setValue("pkg_10c"),
+        .setLabel("Support")
+        .setEmoji("🛠️")
+        .setDescription("Account help, bugs, and questions")
+        .setValue("support"),
       new StringSelectMenuOptionBuilder()
-        .setLabel("40 Credits (4,100 R$)")
-        .setValue("pkg_40c"),
-      new StringSelectMenuOptionBuilder()
-        .setLabel("90 Credits (9,200 R$)")
-        .setValue("pkg_90c"),
-      new StringSelectMenuOptionBuilder()
-        .setLabel("1 Month Premium (1,200 R$)")
-        .setValue("pkg_1m"),
-      new StringSelectMenuOptionBuilder()
-        .setLabel("3 Months Premium (3,600 R$)")
-        .setValue("pkg_3m"),
-      new StringSelectMenuOptionBuilder()
-        .setLabel("6 Months Premium (7,200 R$)")
-        .setValue("pkg_6m")
+        .setLabel("Buy with Robux")
+        .setEmoji("💎")
+        .setDescription("Credits or Developer premium")
+        .setValue("robux"),
     );
 
-  await channel.send({
-    content: `${interaction.user}${ADMIN_ROLE_ID ? ` | <@&${ADMIN_ROLE_ID}>` : ""}`,
-    embeds: [robuxEmbed],
-    components: [
-      new ActionRowBuilder().addComponents(menu),
-      new ActionRowBuilder().addComponents(closeBtn),
-    ],
+  await interaction.channel.send({
+    embeds: [panel],
+    components: [new ActionRowBuilder().addComponents(select)],
+  });
+  return respondEphemeral(interaction, "Ticket panel posted successfully.");
+}
+
+function closeButton() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("close_ticket_btn")
+      .setLabel("Close ticket")
+      .setEmoji("🔒")
+      .setStyle(ButtonStyle.Danger),
+  );
+}
+
+function robuxMenu() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId("robux_package_select")
+    .setPlaceholder("Choose a credits or premium package");
+
+  for (const [value, item] of Object.entries(config.robuxPackages)) {
+    menu.addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel(`${item.label} (${item.price.toLocaleString("en-GB")} R$)`)
+        .setValue(value),
+    );
+  }
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+async function createTicket(interaction) {
+  const kind = interaction.values[0];
+  if (!interaction.guild || !["support", "robux"].includes(kind)) {
+    return respondEphemeral(interaction, "That ticket type is not available.");
+  }
+  await deferEphemeral(interaction);
+
+  return withTicketLock(interaction.guild.id, async () => {
+    const channels = await interaction.guild.channels.fetch();
+    const existing = channels.find((channel) =>
+      isTicketForUser(channel, interaction.user.id),
+    );
+    if (existing) {
+      return respondEphemeral(
+        interaction,
+        `You already have an open ticket: ${existing}`,
+      );
+    }
+
+    const permissionOverwrites = [
+      {
+        id: interaction.guild.id,
+        deny: [PermissionFlagsBits.ViewChannel],
+      },
+      {
+        id: interaction.user.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.AttachFiles,
+        ],
+      },
+      {
+        id: client.user.id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.ManageChannels,
+        ],
+      },
+      ...config.staffRoleIds.map((id) => ({
+        id,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.ManageChannels,
+        ],
+      })),
+    ];
+
+    const parent = channels.get(config.ticketCategoryId);
+    const channel = await interaction.guild.channels.create({
+      name: `ticket-${nextTicketNumber(channels.values())}`,
+      type: ChannelType.GuildText,
+      parent: parent?.type === ChannelType.GuildCategory ? parent.id : undefined,
+      topic: ticketTopic(interaction.user.id, kind),
+      permissionOverwrites,
+      reason: `YetiThumbs ${kind} ticket opened by ${interaction.user.tag}`,
+    });
+
+    await respondEphemeral(interaction, `Your private ticket is ready: ${channel}`);
+
+    if (kind === "support") {
+      await channel.send({
+        content: [
+          `${interaction.user} ${staffMention()}`,
+          "",
+          "Please describe the problem and include the email on your YetiThumbs account.",
+          "Do not send passwords, tokens, or full payment details.",
+        ].join("\n"),
+        components: [closeButton()],
+      });
+      return;
+    }
+
+    const prices = Object.values(config.robuxPackages)
+      .map((item) => `• ${item.label} — ${item.price.toLocaleString("en-GB")} R$`)
+      .join("\n");
+    await channel.send({
+      content: `${interaction.user} ${staffMention()}`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x64f2b6)
+          .setTitle("Buy YetiThumbs with Robux")
+          .setDescription(
+            [
+              "Choose a package below, then send your YetiThumbs email, Roblox username, and purchase screenshot.",
+              "",
+              prices,
+              "",
+              "Card or PayPal: https://yetithumbs.com/pricing",
+            ].join("\n"),
+          ),
+      ],
+      components: [robuxMenu(), closeButton()],
+    });
   });
 }
 
-async function handleRobuxPackage(interaction) {
-  const map = {
-    pkg_10c: {
-      name: "10 Credits for 1,100 Robux",
-      link: process.env.ROBUX_LINK_10C || "(ask staff for gamepass link)",
-    },
-    pkg_40c: {
-      name: "40 Credits for 4,100 Robux",
-      link: process.env.ROBUX_LINK_40C || "(ask staff for gamepass link)",
-    },
-    pkg_90c: {
-      name: "90 Credits for 9,200 Robux",
-      link: process.env.ROBUX_LINK_90C || "(ask staff for gamepass link)",
-    },
-    pkg_1m: {
-      name: "1 Month Premium for 1,200 Robux",
-      link: process.env.ROBUX_LINK_1M || "(ask staff for gamepass link)",
-    },
-    pkg_3m: {
-      name: "3 Months Premium for 3,600 Robux",
-      link: process.env.ROBUX_LINK_3M || "(ask staff for gamepass link)",
-    },
-    pkg_6m: {
-      name: "6 Months Premium for 7,200 Robux",
-      link: process.env.ROBUX_LINK_6M || "(ask staff for gamepass link)",
-    },
-  };
-  const selected = map[interaction.values[0]];
-  if (!selected) {
-    return interaction.reply({
-      content: "Unknown package.",
-      flags: MessageFlags.Ephemeral,
-    });
-  }
+async function selectRobuxPackage(interaction) {
+  const item = config.robuxPackages[interaction.values[0]];
+  if (!item) return respondEphemeral(interaction, "That package is not available.");
 
-  await interaction.update({ components: [] }).catch(() => {});
-  await interaction.followUp({
+  await interaction.update({ components: [closeButton()] });
+  const purchaseLine = item.link
+    ? `Purchase link: ${item.link}`
+    : "A staff member will provide the purchase link in this ticket.";
+  return interaction.channel.send({
     content: [
-      `You selected **${selected.name}**.`,
+      `${interaction.user} selected **${item.label}** for **${item.price.toLocaleString("en-GB")} Robux**.`,
       "",
-      "**1.** Reply with your **YetiThumbs email** and **Roblox username**.",
-      `**2.** Buy here: ${selected.link}`,
-      "**3.** Send a **screenshot** of the purchase in this ticket.",
+      "1. Send the email on your YetiThumbs account.",
+      "2. Send your Roblox username.",
+      `3. ${purchaseLine}`,
+      "4. Upload a screenshot showing the completed purchase.",
       "",
-      `${ADMIN_ROLE_ID ? `<@&${ADMIN_ROLE_ID}>` : "Staff"} will verify and run \`/grant-credits\` or \`/grant-premium\`.`,
+      `${staffMention()} will verify it, then use the matching grant command.`,
     ].join("\n"),
   });
 }
 
-async function handleCloseTicket(interaction) {
+async function grantCredits(interaction) {
   if (!isStaff(interaction.member)) {
-    return interaction.reply({
-      content: "Only staff can close tickets.",
-      flags: MessageFlags.Ephemeral,
-    });
+    return respondEphemeral(interaction, "Only configured staff can grant credits.");
   }
-  if (!interaction.channel?.name?.startsWith("ticket-")) {
-    return interaction.reply({
-      content: "This is not a ticket channel.",
-      flags: MessageFlags.Ephemeral,
-    });
+  await deferEphemeral(interaction);
+  const email = interaction.options.getString("email", true);
+  const amount = interaction.options.getInteger("amount", true);
+  const result = await yeti.grantCredits(email, amount);
+  return respondEphemeral(
+    interaction,
+    `Granted **${amount} credits** to **${result.user.email}**. New balance: **${result.credits}**.`,
+  );
+}
+
+async function grantPremium(interaction) {
+  if (!isStaff(interaction.member)) {
+    return respondEphemeral(interaction, "Only configured staff can grant premium.");
   }
-  await interaction.reply("Closing ticket in 5 seconds...");
+  await deferEphemeral(interaction);
+  const email = interaction.options.getString("email", true);
+  const months = interaction.options.getInteger("months", true);
+  const result = await yeti.grantPremium(email, months);
+  const expiryNote = result.expiryPersisted
+    ? `Expires: **${result.expiresAt.toUTCString()}**.`
+    : "The plan was granted, but the website entitlement migration must be deployed before automatic expiry works.";
+  return respondEphemeral(
+    interaction,
+    `Granted **Developer** premium and **${result.credits} credits** to **${result.user.email}** for **${months} month(s)**. ${expiryNote}`,
+  );
+}
+
+async function closeTicket(interaction) {
+  if (!isStaff(interaction.member)) {
+    return respondEphemeral(interaction, "Only configured staff can close tickets.");
+  }
+  if (!interaction.channel?.name?.match(/^ticket-\d+$/)) {
+    return respondEphemeral(interaction, "This button is not in a YetiThumbs ticket.");
+  }
+
+  await interaction.reply({
+    content: "Ticket closed by staff. This channel will be deleted in 5 seconds.",
+    flags: MessageFlags.Ephemeral,
+  });
   setTimeout(() => {
-    interaction.channel.delete().catch(console.error);
+    interaction.channel.delete("YetiThumbs ticket closed by staff").catch(console.error);
   }, 5000);
 }
 
-client.once("clientReady", onReady);
-client.once("ready", onReady);
+async function reportInteractionError(interaction, error) {
+  console.error("Interaction failed", error);
+  await yeti
+    .logError("interaction", error, {
+      interaction_id: interaction.id,
+      guild_id: interaction.guildId,
+      user_id: interaction.user?.id,
+      command: interaction.commandName,
+      custom_id: interaction.customId,
+    })
+    .catch((loggingError) => console.error("Error logging failed", loggingError));
 
-let booted = false;
-async function onReady() {
-  if (booted || !client.user) return;
-  booted = true;
-  console.log(`ONLINE as ${client.user.tag}`);
-  console.log(`Guilds: ${client.guilds.cache.size}`);
   try {
-    await registerCommands();
-  } catch (e) {
-    console.error("Command register failed:", e.message);
+    await respondEphemeral(
+      interaction,
+      `Something went wrong while handling that request. Staff can use interaction ID \`${interaction.id}\` to find the error log.`,
+    );
+  } catch (replyError) {
+    if (![40060, 10062].includes(replyError?.code)) console.error(replyError);
   }
 }
 
-client.on("interactionCreate", async (interaction) => {
+client.once(Events.ClientReady, async (readyClient) => {
+  console.log(`Discord connected as ${readyClient.user.tag}`);
   try {
-    if (interaction.isChatInputCommand()) {
-      const name = interaction.commandName;
-
-      if (name === "setup-tickets") {
-        await handleSetupTickets(interaction);
-        return;
-      }
-
-      if (name === "grant-credits") {
-        await safeDefer(interaction);
-        const email = interaction.options.getString("email", true);
-        const amount = interaction.options.getInteger("amount", true);
-        try {
-          const { credits } = await grantCredits(email, amount);
-          await safeEdit(
-            interaction,
-            `Granted **${amount}** credits to **${email}**. New balance: **${credits}**.`
-          );
-        } catch (e) {
-          await safeEdit(interaction, `❌ ${e.message}`);
-        }
-        return;
-      }
-
-      if (name === "grant-premium") {
-        await safeDefer(interaction);
-        const email = interaction.options.getString("email", true);
-        const months = interaction.options.getInteger("months", true);
-        try {
-          const { ends } = await grantPremium(email, months);
-          await safeEdit(
-            interaction,
-            `Granted **${PREMIUM_PLAN}** plan (${PREMIUM_CREDITS} credits) to **${email}** for **${months}** month(s).\nManual window ends ~ **${ends.toUTCString()}**.`
-          );
-        } catch (e) {
-          await safeEdit(interaction, `❌ ${e.message}`);
-        }
-        return;
-      }
+    await registerCommands();
+    const health = await yeti.healthCheck();
+    if (!health.entitlementSchemaReady) {
+      console.warn(`Supabase entitlement migration pending: ${health.schemaError}`);
     }
-
-    if (interaction.isStringSelectMenu()) {
-      if (interaction.customId === "ticket_select") {
-        await handleTicketSelect(interaction);
-        return;
-      }
-      if (interaction.customId === "robux_package_select") {
-        await handleRobuxPackage(interaction);
-        return;
-      }
-    }
-
-    if (interaction.isButton() && interaction.customId === "close_ticket_btn") {
-      await handleCloseTicket(interaction);
-    }
-  } catch (err) {
-    console.error("interaction error:", err);
-    try {
-      const msg = { content: `Something went wrong: ${err.message}`, flags: MessageFlags.Ephemeral };
-      if (interaction.deferred || interaction.replied) await interaction.followUp(msg);
-      else await interaction.reply(msg);
-    } catch {
-      /* ignore */
-    }
+    ready = true;
+    console.log(`ONLINE: ${commands.length} commands, ${readyClient.guilds.cache.size} guild(s)`);
+  } catch (error) {
+    ready = false;
+    console.error("Startup validation failed", error);
+    await yeti.logError("startup", error).catch(() => {});
   }
 });
 
-console.log("Starting YetiThumbs bot...");
-console.log("Supabase:", SUPABASE_URL);
-client.login(TOKEN);
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === "setup-tickets") return await setupTickets(interaction);
+      if (interaction.commandName === "grant-credits") return await grantCredits(interaction);
+      if (interaction.commandName === "grant-premium") return await grantPremium(interaction);
+      return;
+    }
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === "ticket_select") return await createTicket(interaction);
+      if (interaction.customId === "robux_package_select") {
+        return await selectRobuxPackage(interaction);
+      }
+      return;
+    }
+    if (interaction.isButton() && interaction.customId === "close_ticket_btn") {
+      return await closeTicket(interaction);
+    }
+  } catch (error) {
+    await reportInteractionError(interaction, error);
+  }
+});
+
+const server = createServer((request, response) => {
+  response.setHeader("content-type", "application/json; charset=utf-8");
+  if (request.url === "/health") {
+    response.writeHead(200);
+    response.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (request.url === "/ready") {
+    response.writeHead(ready ? 200 : 503);
+    response.end(JSON.stringify({ status: ready ? "ready" : "starting" }));
+    return;
+  }
+  response.writeHead(404);
+  response.end(JSON.stringify({ error: "not_found" }));
+});
+
+server.listen(config.port, config.host, () => {
+  console.log(`Health server listening on ${config.host}:${config.port}`);
+});
+
+async function shutdown(signal) {
+  console.log(`${signal} received; shutting down`);
+  ready = false;
+  server.close();
+  client.destroy();
+}
+
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+
+console.log("Starting YetiThumbs bot");
+await client.login(config.token);

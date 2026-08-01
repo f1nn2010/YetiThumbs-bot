@@ -1,34 +1,20 @@
 {
-  "name": "titanbot",
-  "version": "2.1.0",
-  "description": "Modular Ultimate Community Bot by Touchpoint Support",
+  "name": "yetithumbs-bot",
+  "version": "1.0.0",
+  "description": "YetiThumbs Discord support, Robux ticket, and account grant bot",
   "main": "src/yetibot.js",
   "type": "module",
   "scripts": {
     "start": "node src/yetibot.js",
-    "start:legacy": "node src/app.js",
-    "migrate": "node scripts/migrate.js apply",
-    "migrate:check": "node scripts/migrate.js check",
-    "migrate:status": "node scripts/migrate.js status",
-    "migrate:keys": "node scripts/migrate-keys.js",
-    "migrate:keys:dry": "node scripts/migrate-keys.js --dry-run",
-    "backup:db": "node scripts/backup.js",
-    "restore:db": "node scripts/restore.js",
-    "backup:drill": "node scripts/restore-drill.js"
+    "preflight": "node scripts/preflight.js",
+    "smoke": "node scripts/live-smoke.js",
+    "check": "node --check src/yetibot.js && node --check src/yetiService.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "@discordjs/rest": "^2.6.1",
     "@supabase/supabase-js": "^2.111.0",
-    "axios": "^1.15.2",
     "discord.js": "^14.26.4",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "node-cron": "^4.2.1",
-    "pg": "^8.11.3",
-    "riffy": "1.0.12",
-    "winston": "^3.19.0",
-    "winston-daily-rotate-file": "^5.0.0",
-    "zod": "^3.25.76"
+    "dotenv": "^17.2.3"
   },
   "engines": {
     "node": ">=20.10.0"
