@@ -1,8 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 import { isMissingRpc, normalizeEmail } from "./domain.js";
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+
 function fail(message, cause) {
-  const error = new Error(message, cause ? { cause } : undefined);
+  return new Error(message, cause ? { cause } : undefined);
+}
+
+function userError(message) {
+  const error = new Error(message);
   error.publicMessage = message;
   return error;
 }
@@ -19,7 +25,11 @@ export function createYetiService(config, options = {}) {
     });
   async function findUserByEmail(email) {
     const target = normalizeEmail(email);
-    if (!target) throw fail("Email is required.");
+    if (!target || target.length > 254 || !EMAIL_PATTERN.test(target)) {
+      throw userError(
+        "Enter the customer's full YetiThumbs email address, such as name@example.com.",
+      );
+    }
 
     for (let page = 1; page <= 50; page += 1) {
       const { data, error } = await supabase.auth.admin.listUsers({
@@ -33,14 +43,14 @@ export function createYetiService(config, options = {}) {
       if (users.length < 200) break;
     }
 
-    throw fail(
+    throw userError(
       `No YetiThumbs account exists for ${target}. The customer must sign up first.`,
     );
   }
 
   async function grantCredits(email, amount) {
     if (!Number.isInteger(amount) || amount < 1 || amount > 100000) {
-      throw fail("Credits must be a whole number between 1 and 100000.");
+      throw userError("Credits must be a whole number between 1 and 100000.");
     }
     const user = await findUserByEmail(email);
     const { data: rpcData, error: rpcError } = await supabase.rpc(
@@ -62,7 +72,9 @@ export function createYetiService(config, options = {}) {
 
   async function grantPremium(email, months) {
     if (!Number.isInteger(months) || months < 1 || months > 36) {
-      throw fail("Premium duration must be a whole number between 1 and 36 months.");
+      throw userError(
+        "Premium duration must be a whole number between 1 and 36 months.",
+      );
     }
     const user = await findUserByEmail(email);
     const { data: rpcData, error: rpcError } = await supabase.rpc(

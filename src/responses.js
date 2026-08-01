@@ -2,6 +2,12 @@ import { MessageFlags } from "discord.js";
 
 const ACKNOWLEDGEMENT_ERRORS = new Set([40060, 10062]);
 
+export function publicErrorMessage(error) {
+  return typeof error?.publicMessage === "string" && error.publicMessage.trim()
+    ? error.publicMessage.trim()
+    : null;
+}
+
 export async function deferEphemeral(interaction) {
   if (interaction.deferred || interaction.replied) return false;
   try {

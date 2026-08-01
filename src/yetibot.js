@@ -22,7 +22,11 @@ import {
   nextTicketNumber,
   ticketTopic,
 } from "./domain.js";
-import { deferEphemeral, respondEphemeral } from "./responses.js";
+import {
+  deferEphemeral,
+  publicErrorMessage,
+  respondEphemeral,
+} from "./responses.js";
 import { createYetiService } from "./yetiService.js";
 
 const config = loadConfig();
@@ -314,6 +318,17 @@ async function closeTicket(interaction) {
 }
 
 async function reportInteractionError(interaction, error) {
+  const safeMessage = publicErrorMessage(error);
+  if (safeMessage) {
+    console.warn(`Interaction ${interaction.id} rejected by validation`);
+    try {
+      await respondEphemeral(interaction, safeMessage);
+    } catch (replyError) {
+      if (![40060, 10062].includes(replyError?.code)) console.error(replyError);
+    }
+    return;
+  }
+
   console.error("Interaction failed", error);
   await yeti
     .logError("interaction", error, {

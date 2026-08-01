@@ -84,11 +84,15 @@ test("grant operations fail closed when the atomic database function is missing"
 
   await assert.rejects(
     service.grantCredits("creator@example.com", 10),
-    /Credit grant failed: Function not found/,
+    (error) =>
+      /Credit grant failed: Function not found/.test(error.message) &&
+      error.publicMessage === undefined,
   );
   await assert.rejects(
     service.grantPremium("creator@example.com", 1),
-    /Premium grant failed: Function not found/,
+    (error) =>
+      /Premium grant failed: Function not found/.test(error.message) &&
+      error.publicMessage === undefined,
   );
 });
 
@@ -104,6 +108,29 @@ test("grant operations validate bounds before querying customer accounts", async
     /between 1 and 36/,
   );
   assert.deepEqual(calls, []);
+});
+
+test("account lookup rejects a malformed email before calling Supabase Auth", async () => {
+  let authCalls = 0;
+  const supabase = {
+    auth: {
+      admin: {
+        async listUsers() {
+          authCalls += 1;
+          return { data: { users: [] }, error: null };
+        },
+      },
+    },
+  };
+  const service = createYetiService(config, { supabase });
+
+  await assert.rejects(
+    service.findUserByEmail("2"),
+    (error) =>
+      /full YetiThumbs email address/.test(error.message) &&
+      error.publicMessage === error.message,
+  );
+  assert.equal(authCalls, 0);
 });
 
 function serviceForHealth(probeErrors) {

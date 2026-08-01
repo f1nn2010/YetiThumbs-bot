@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deferEphemeral, respondEphemeral } from "../src/responses.js";
+import {
+  deferEphemeral,
+  publicErrorMessage,
+  respondEphemeral,
+} from "../src/responses.js";
 
 test("deferEphemeral acknowledges an interaction once", async () => {
   let calls = 0;
@@ -42,4 +46,12 @@ test("deferEphemeral safely absorbs Discord's already-acknowledged error", async
   };
 
   assert.equal(await deferEphemeral(interaction), false);
+});
+
+test("only explicitly public service errors are safe to show to staff", () => {
+  assert.equal(
+    publicErrorMessage({ publicMessage: " Enter a valid email. " }),
+    "Enter a valid email.",
+  );
+  assert.equal(publicErrorMessage(new Error("database details")), null);
 });

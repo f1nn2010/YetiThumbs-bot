@@ -11,12 +11,17 @@ export const commands = [
     .setName("grant-credits")
     .setDescription("Staff: grant credits to a YetiThumbs account by email")
     .addStringOption((option) =>
-      option.setName("email").setDescription("Account email").setRequired(true),
+      option
+        .setName("email")
+        .setDescription("Customer's full YetiThumbs email address")
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(254),
     )
     .addIntegerOption((option) =>
       option
         .setName("amount")
-        .setDescription("Credits to add")
+        .setDescription("Whole number of credits to add (1-100000)")
         .setRequired(true)
         .setMinValue(1)
         .setMaxValue(100000),
@@ -25,12 +30,17 @@ export const commands = [
     .setName("grant-premium")
     .setDescription("Staff: grant the Developer plan to an account by email")
     .addStringOption((option) =>
-      option.setName("email").setDescription("Account email").setRequired(true),
+      option
+        .setName("email")
+        .setDescription("Customer's full YetiThumbs email address")
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(254),
     )
     .addIntegerOption((option) =>
       option
         .setName("months")
-        .setDescription("Premium duration in months")
+        .setDescription("Whole number of premium months (1-36)")
         .setRequired(true)
         .setMinValue(1)
         .setMaxValue(36),
