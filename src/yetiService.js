@@ -1,10 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import {
-  addCalendarMonths,
-  isMissingColumn,
-  isMissingRpc,
-  normalizeEmail,
-} from "./domain.js";
+import { isMissingRpc, normalizeEmail } from "./domain.js";
 
 function fail(message, cause) {
   const error = new Error(message, cause ? { cause } : undefined);
@@ -22,8 +17,6 @@ export function createYetiService(config, options = {}) {
         detectSessionInUrl: false,
       },
     });
-  const now = options.now ?? (() => new Date());
-
   async function findUserByEmail(email) {
     const target = normalizeEmail(email);
     if (!target) throw fail("Email is required.");
@@ -46,46 +39,31 @@ export function createYetiService(config, options = {}) {
   }
 
   async function grantCredits(email, amount) {
+    if (!Number.isInteger(amount) || amount < 1 || amount > 100000) {
+      throw fail("Credits must be a whole number between 1 and 100000.");
+    }
     const user = await findUserByEmail(email);
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       "grant_yetithumbs_credits",
       { p_user_id: user.id, p_amount: amount },
     );
 
-    if (!rpcError) {
-      const credits = Array.isArray(rpcData)
-        ? rpcData[0]?.credits ?? rpcData[0]
-        : rpcData?.credits ?? rpcData;
-      return { user, credits: Number(credits) };
-    }
-    if (!isMissingRpc(rpcError)) {
-      throw fail(`Credit grant failed: ${rpcError.message}`, rpcError);
-    }
+    if (rpcError) throw fail(`Credit grant failed: ${rpcError.message}`, rpcError);
 
-    const { data: profile, error: readError } = await supabase
-      .from("yetithumbs_profiles")
-      .select("credits")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (readError) throw fail(`Profile lookup failed: ${readError.message}`, readError);
-
-    const credits = (profile?.credits ?? 0) + amount;
-    const { error: writeError } = await supabase
-      .from("yetithumbs_profiles")
-      .upsert(
-        {
-          id: user.id,
-          email: user.email,
-          credits,
-          updated_at: now().toISOString(),
-        },
-        { onConflict: "id" },
-      );
-    if (writeError) throw fail(`Credit grant failed: ${writeError.message}`, writeError);
-    return { user, credits, usedFallback: true };
+    const credits = Array.isArray(rpcData)
+      ? rpcData[0]?.credits ?? rpcData[0]
+      : rpcData?.credits ?? rpcData;
+    const numericCredits = Number(credits);
+    if (!Number.isSafeInteger(numericCredits) || numericCredits < 0) {
+      throw fail("Credit grant returned an invalid balance.");
+    }
+    return { user, credits: numericCredits };
   }
 
   async function grantPremium(email, months) {
+    if (!Number.isInteger(months) || months < 1 || months > 36) {
+      throw fail("Premium duration must be a whole number between 1 and 36 months.");
+    }
     const user = await findUserByEmail(email);
     const { data: rpcData, error: rpcError } = await supabase.rpc(
       "grant_yetithumbs_manual_plan",
@@ -98,53 +76,23 @@ export function createYetiService(config, options = {}) {
       },
     );
 
-    if (!rpcError) {
-      const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-      return {
-        user,
-        credits: Number(row?.credits ?? config.premiumCredits),
-        expiresAt: new Date(row?.expires_at),
-        expiryPersisted: true,
-      };
-    }
-    if (!isMissingRpc(rpcError)) {
-      throw fail(`Premium grant failed: ${rpcError.message}`, rpcError);
-    }
+    if (rpcError) throw fail(`Premium grant failed: ${rpcError.message}`, rpcError);
 
-    const expiresAt = addCalendarMonths(now(), months);
-    const baseProfile = {
-      id: user.id,
-      email: user.email,
-      plan: config.premiumPlan,
-      credits: config.premiumCredits,
-      updated_at: now().toISOString(),
-    };
-    let { error: writeError } = await supabase
-      .from("yetithumbs_profiles")
-      .upsert(
-        {
-          ...baseProfile,
-          plan_source: "robux",
-          manual_plan_expires_at: expiresAt.toISOString(),
-        },
-        { onConflict: "id" },
-      );
-
-    let expiryPersisted = true;
-    if (isMissingColumn(writeError)) {
-      expiryPersisted = false;
-      ({ error: writeError } = await supabase
-        .from("yetithumbs_profiles")
-        .upsert(baseProfile, { onConflict: "id" }));
+    const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    const credits = Number(row?.credits);
+    const expiresAt = new Date(row?.expires_at);
+    if (
+      !Number.isSafeInteger(credits) ||
+      credits < 0 ||
+      Number.isNaN(expiresAt.getTime())
+    ) {
+      throw fail("Premium grant returned an invalid entitlement.");
     }
-    if (writeError) throw fail(`Premium grant failed: ${writeError.message}`, writeError);
-
     return {
       user,
-      credits: config.premiumCredits,
+      credits,
       expiresAt,
-      expiryPersisted,
-      usedFallback: true,
+      expiryPersisted: true,
     };
   }
 
@@ -160,11 +108,50 @@ export function createYetiService(config, options = {}) {
       .select("id, plan_source, manual_plan_expires_at")
       .limit(1);
 
-    return {
-      ok: !profileError,
-      entitlementSchemaReady: !profileError,
-      schemaError: profileError?.message,
-    };
+    if (profileError) {
+      return {
+        ok: false,
+        entitlementSchemaReady: false,
+        schemaError: `Profile schema check failed: ${profileError.message}`,
+      };
+    }
+
+    const rpcProbes = [
+      {
+        name: "grant_yetithumbs_credits",
+        args: {
+          p_user_id: "00000000-0000-0000-0000-000000000000",
+          p_amount: 0,
+        },
+        expected: "Credit amount must be between",
+      },
+      {
+        name: "grant_yetithumbs_manual_plan",
+        args: {
+          p_user_id: "00000000-0000-0000-0000-000000000000",
+          p_email: "probe@invalid.local",
+          p_plan: "invalid",
+          p_credits: 0,
+          p_months: 0,
+        },
+        expected: "Unsupported plan",
+      },
+    ];
+
+    for (const probe of rpcProbes) {
+      const { error } = await supabase.rpc(probe.name, probe.args);
+      const expectedRejection =
+        error && !isMissingRpc(error) && error.message?.includes(probe.expected);
+      if (!expectedRejection) {
+        return {
+          ok: false,
+          entitlementSchemaReady: false,
+          schemaError: `${probe.name} is missing, inaccessible, or failed its safety probe`,
+        };
+      }
+    }
+
+    return { ok: true, entitlementSchemaReady: true };
   }
 
   async function logError(context, error, metadata = {}) {

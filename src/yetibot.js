@@ -12,10 +12,10 @@ import {
   PermissionFlagsBits,
   REST,
   Routes,
-  SlashCommandBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from "discord.js";
+import { commands } from "./commands.js";
 import { loadConfig } from "./config.js";
 import {
   isTicketForUser,
@@ -30,44 +30,8 @@ const yeti = createYetiService(config);
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const ticketLocks = new Map();
 let ready = false;
+let startupValidated = false;
 let shuttingDown = false;
-
-const commands = [
-  new SlashCommandBuilder()
-    .setName("setup-tickets")
-    .setDescription("Post the YetiThumbs support and Robux ticket panel")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-  new SlashCommandBuilder()
-    .setName("grant-credits")
-    .setDescription("Grant credits to a YetiThumbs account by email")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption((option) =>
-      option.setName("email").setDescription("Account email").setRequired(true),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName("amount")
-        .setDescription("Credits to add")
-        .setRequired(true)
-        .setMinValue(1)
-        .setMaxValue(100000),
-    ),
-  new SlashCommandBuilder()
-    .setName("grant-premium")
-    .setDescription("Grant the Developer plan to an account by email")
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addStringOption((option) =>
-      option.setName("email").setDescription("Account email").setRequired(true),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName("months")
-        .setDescription("Premium duration in months")
-        .setRequired(true)
-        .setMinValue(1)
-        .setMaxValue(36),
-    ),
-].map((command) => command.toJSON());
 
 function isStaff(member) {
   if (!member) return false;
@@ -376,9 +340,8 @@ client.once(Events.ClientReady, async (readyClient) => {
   try {
     await registerCommands();
     const health = await yeti.healthCheck();
-    if (!health.entitlementSchemaReady) {
-      console.warn(`Supabase entitlement migration pending: ${health.schemaError}`);
-    }
+    if (!health.entitlementSchemaReady) throw new Error(health.schemaError);
+    startupValidated = true;
     ready = true;
     console.log(`ONLINE: ${commands.length} commands, ${readyClient.guilds.cache.size} guild(s)`);
   } catch (error) {
@@ -387,6 +350,28 @@ client.once(Events.ClientReady, async (readyClient) => {
     await yeti.logError("startup", error).catch(() => {});
     await shutdown("startup validation failure", 1);
   }
+});
+
+client.on(Events.ShardDisconnect, (event, shardId) => {
+  ready = false;
+  console.warn(`Discord shard ${shardId} disconnected (${event.code})`);
+});
+
+client.on(Events.ShardReady, (shardId) => {
+  if (startupValidated && !shuttingDown) {
+    ready = true;
+    console.log(`Discord shard ${shardId} reconnected`);
+  }
+});
+
+client.once(Events.Invalidated, () => {
+  ready = false;
+  void shutdown("Discord session invalidated", 1);
+});
+
+client.on(Events.Error, (error) => {
+  console.error("Discord client error", error);
+  yeti.logError("discord_client", error).catch(() => {});
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

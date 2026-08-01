@@ -25,7 +25,9 @@ must both be green for the deployed commit.
 7. Read the new deployment logs and confirm the three healthy-state lines above.
 
 Railway auto-deploy should stay enabled for the `main` branch. Its deployment
-health check prevents a broken revision from replacing the current healthy bot.
+preflight and health check prevent a broken revision from replacing the current
+healthy bot. Railway's health check is deployment-time only; use Discord's
+online indicator or an external monitor for continuous availability checks.
 
 ## Common failures
 

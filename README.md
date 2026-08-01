@@ -26,7 +26,8 @@ npm run verify
 npm run doctor
 ```
 
-6. Start the bot with `npm start`, or push `main` and let Railway deploy it.
+6. Start the bot with `npm start`, or follow the exact Railway checklist in
+   [RAILWAY.md](RAILWAY.md).
 
 `npm run doctor` never registers commands or opens a Discord gateway connection.
 It validates credentials, the guild, staff roles, bot permissions, the optional
@@ -60,6 +61,9 @@ the bot can publish a broken or unsafe workflow.
 
 On startup, the bot replaces the configured guild's application-command list
 with exactly the three YetiThumbs commands and clears stale global commands.
+The commands are visible to guild members so configured staff roles can use
+them; every privileged action is still rejected server-side unless the caller
+is an Administrator, configured staff role member, or configured owner.
 
 ## Health and deployment
 
@@ -67,9 +71,10 @@ with exactly the three YetiThumbs commands and clears stale global commands.
 - `GET /ready` returns HTTP 200 only after Discord login, command registration,
   and Supabase validation succeed.
 
-`railway.json` selects the Dockerfile, uses `/ready` as the deployment health
-check, and enables restart-on-failure. Railway can keep the service private;
-Discord gateway traffic is outbound, so a public domain is unnecessary.
+`railway.json` selects the Dockerfile, runs the real read-only preflight before
+each release, uses `/ready` as the deployment health check, and enables
+restart-on-failure. Railway can keep the service private; Discord gateway
+traffic is outbound, so a public domain is unnecessary.
 
 For deployment checks, recovery steps, and common errors, see [RUNBOOK.md](RUNBOOK.md).
 

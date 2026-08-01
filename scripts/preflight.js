@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { loadConfig } from "../src/config.js";
+import { createYetiService } from "../src/yetiService.js";
 
 const config = loadConfig();
 
@@ -84,24 +84,9 @@ if (config.guildId) {
 }
 
 console.log("Checking Supabase service credentials...");
-const supabase = createClient(config.supabaseUrl, config.supabaseKey, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
-const { error: authError } = await supabase.auth.admin.listUsers({
-  page: 1,
-  perPage: 1,
-});
-if (authError) throw new Error(`Supabase auth check failed: ${authError.message}`);
-
-const { error: schemaError } = await supabase
-  .from("yetithumbs_profiles")
-  .select("id, plan_source, manual_plan_expires_at")
-  .limit(1);
-if (schemaError) {
-  console.warn(`Supabase entitlement migration pending: ${schemaError.message}`);
-} else {
-  console.log("Supabase entitlement schema OK");
-}
+const health = await createYetiService(config).healthCheck();
+if (!health.entitlementSchemaReady) throw new Error(health.schemaError);
+console.log("Supabase entitlement schema and grant functions OK");
 
 const missingLinks = Object.values(config.robuxPackages).filter((item) => !item.link);
 if (missingLinks.length) {
