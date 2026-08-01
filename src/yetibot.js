@@ -30,6 +30,7 @@ const yeti = createYetiService(config);
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const ticketLocks = new Map();
 let ready = false;
+let shuttingDown = false;
 
 const commands = [
   new SlashCommandBuilder()
@@ -99,19 +100,13 @@ async function withTicketLock(guildId, operation) {
 
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(config.token);
-  if (config.guildId) {
-    await rest.put(
-      Routes.applicationGuildCommands(config.clientId, config.guildId),
-      { body: commands },
-    );
-    // Remove stale TitanBot global commands. Guild commands appear immediately.
-    await rest.put(Routes.applicationCommands(config.clientId), { body: [] });
-    console.log(`Registered ${commands.length} commands in guild ${config.guildId}`);
-    return;
-  }
-
-  await rest.put(Routes.applicationCommands(config.clientId), { body: commands });
-  console.log(`Registered ${commands.length} global commands`);
+  await rest.put(
+    Routes.applicationGuildCommands(config.clientId, config.guildId),
+    { body: commands },
+  );
+  // Guild commands appear immediately; clear any stale global commands.
+  await rest.put(Routes.applicationCommands(config.clientId), { body: [] });
+  console.log(`Registered ${commands.length} commands in guild ${config.guildId}`);
 }
 
 async function setupTickets(interaction) {
@@ -390,6 +385,7 @@ client.once(Events.ClientReady, async (readyClient) => {
     ready = false;
     console.error("Startup validation failed", error);
     await yeti.logError("startup", error).catch(() => {});
+    await shutdown("startup validation failure", 1);
   }
 });
 
@@ -418,14 +414,25 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 const server = createServer((request, response) => {
   response.setHeader("content-type", "application/json; charset=utf-8");
+  const runtime = {
+    uptime_seconds: Math.floor(process.uptime()),
+    revision: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
+  };
   if (request.url === "/health") {
     response.writeHead(200);
-    response.end(JSON.stringify({ status: "ok" }));
+    response.end(JSON.stringify({ status: "ok", ...runtime }));
     return;
   }
   if (request.url === "/ready") {
     response.writeHead(ready ? 200 : 503);
-    response.end(JSON.stringify({ status: ready ? "ready" : "starting" }));
+    response.end(
+      JSON.stringify({
+        status: ready ? "ready" : shuttingDown ? "stopping" : "starting",
+        discord: ready ? "connected" : "not_ready",
+        guilds: client.guilds.cache.size,
+        ...runtime,
+      }),
+    );
     return;
   }
   response.writeHead(404);
@@ -436,15 +443,22 @@ server.listen(config.port, config.host, () => {
   console.log(`Health server listening on ${config.host}:${config.port}`);
 });
 
-async function shutdown(signal) {
+async function shutdown(signal, exitCode = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
   console.log(`${signal} received; shutting down`);
   ready = false;
-  server.close();
   client.destroy();
+  await new Promise((resolve) => server.close(resolve));
+  process.exitCode = exitCode;
 }
 
-process.once("SIGINT", () => shutdown("SIGINT"));
-process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 console.log("Starting YetiThumbs bot");
+console.log(
+  `Configuration: guild ${config.guildId}; ${config.staffRoleIds.length} staff role(s); ` +
+    `${Object.values(config.robuxPackages).filter((item) => item.link).length}/6 Robux link(s)`,
+);
 await client.login(config.token);

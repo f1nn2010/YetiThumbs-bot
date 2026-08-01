@@ -32,6 +32,10 @@ export function parseIdList(...values) {
   ];
 }
 
+export function isDiscordId(value) {
+  return /^\d{17,20}$/.test(cleanEnv(value));
+}
+
 export function normalizeSupabaseUrl(value) {
   const raw = cleanEnv(value);
   if (!raw) return "";
@@ -43,6 +47,31 @@ export function normalizeSupabaseUrl(value) {
   } catch {
     return "";
   }
+}
+
+export function normalizeRobloxUrl(value) {
+  const raw = cleanEnv(value);
+  if (!raw) return "";
+
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== "https:") return "";
+    if (hostname !== "roblox.com" && !hostname.endsWith(".roblox.com")) return "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+
+function optionalRobloxUrl(value, name) {
+  const raw = cleanEnv(value);
+  if (!raw) return "";
+  const normalized = normalizeRobloxUrl(raw);
+  if (!normalized) {
+    throw new Error(`${name} must be an HTTPS URL on roblox.com`);
+  }
+  return normalized;
 }
 
 function integer(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
@@ -80,44 +109,48 @@ export function loadConfig(env = process.env) {
         label: "10 Credits",
         price: 1100,
         credits: 10,
-        link: cleanEnv(env.ROBUX_LINK_10C),
+        link: optionalRobloxUrl(env.ROBUX_LINK_10C, "ROBUX_LINK_10C"),
       },
       pkg_40c: {
         label: "40 Credits (Starter)",
         price: 4100,
         credits: 40,
-        link: cleanEnv(env.ROBUX_LINK_40C),
+        link: optionalRobloxUrl(env.ROBUX_LINK_40C, "ROBUX_LINK_40C"),
       },
       pkg_90c: {
         label: "90 Credits (Developer)",
         price: 9200,
         credits: 90,
-        link: cleanEnv(env.ROBUX_LINK_90C),
+        link: optionalRobloxUrl(env.ROBUX_LINK_90C, "ROBUX_LINK_90C"),
       },
       pkg_1m: {
         label: "1 Month Premium",
         price: 1200,
         months: 1,
-        link: cleanEnv(env.ROBUX_LINK_1M),
+        link: optionalRobloxUrl(env.ROBUX_LINK_1M, "ROBUX_LINK_1M"),
       },
       pkg_3m: {
         label: "3 Months Premium",
         price: 3600,
         months: 3,
-        link: cleanEnv(env.ROBUX_LINK_3M),
+        link: optionalRobloxUrl(env.ROBUX_LINK_3M, "ROBUX_LINK_3M"),
       },
       pkg_6m: {
         label: "6 Months Premium",
         price: 7200,
         months: 6,
-        link: cleanEnv(env.ROBUX_LINK_6M),
+        link: optionalRobloxUrl(env.ROBUX_LINK_6M, "ROBUX_LINK_6M"),
       },
     },
   };
 
   const missing = [];
   if (!config.token) missing.push("DISCORD_TOKEN");
-  if (!config.clientId) missing.push("CLIENT_ID");
+  if (!isDiscordId(config.clientId)) missing.push("CLIENT_ID (Discord ID)");
+  if (!isDiscordId(config.guildId)) missing.push("GUILD_ID (Discord ID)");
+  if (config.ticketCategoryId && !isDiscordId(config.ticketCategoryId)) {
+    missing.push("DISCORD_TICKET_CATEGORY_ID (Discord ID)");
+  }
   if (!config.supabaseUrl) missing.push("SUPABASE_URL");
   if (!config.supabaseKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
 

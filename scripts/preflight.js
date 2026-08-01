@@ -25,10 +25,11 @@ if (application.id !== config.clientId) {
 console.log(`Discord OK: ${botUser.username}#${botUser.discriminator}`);
 
 if (config.guildId) {
-  const [guild, roles, member] = await Promise.all([
+  const [guild, roles, member, channels] = await Promise.all([
     discord(`/guilds/${config.guildId}`),
     discord(`/guilds/${config.guildId}/roles`),
     discord(`/guilds/${config.guildId}/members/${botUser.id}`),
+    discord(`/guilds/${config.guildId}/channels`),
   ]);
   const roleIds = new Set(roles.map((role) => role.id));
   const missingRoles = config.staffRoleIds.filter((id) => !roleIds.has(id));
@@ -55,6 +56,19 @@ if (config.guildId) {
     throw new Error(`Bot is missing guild permissions: ${missingPermissions.join(", ")}`);
   }
   console.log(`Guild OK: ${guild.name}; bot member roles: ${member.roles.length}`);
+
+  if (config.ticketCategoryId) {
+    const category = channels.find((channel) => channel.id === config.ticketCategoryId);
+    if (!category) {
+      throw new Error("DISCORD_TICKET_CATEGORY_ID does not exist in the configured guild");
+    }
+    if (category.type !== 4) {
+      throw new Error("DISCORD_TICKET_CATEGORY_ID is not a Discord category");
+    }
+    console.log(`Ticket category OK: ${category.name}`);
+  } else {
+    console.warn("Warning: DISCORD_TICKET_CATEGORY_ID is unset; tickets will be created at the server root.");
+  }
 
   const [guildCommands, globalCommands] = await Promise.all([
     discord(`/applications/${config.clientId}/guilds/${config.guildId}/commands`),
@@ -95,4 +109,5 @@ if (missingLinks.length) {
     `Warning: ${missingLinks.length} Robux links are unset; tickets will ask staff to provide a link.`,
   );
 }
+console.log(`Robux purchase links: ${6 - missingLinks.length}/6 configured`);
 console.log("Preflight complete");

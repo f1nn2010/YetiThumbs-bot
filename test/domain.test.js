@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { addCalendarMonths, nextTicketNumber, ticketTopic, isTicketForUser } from "../src/domain.js";
-import { cleanEnv, normalizeSupabaseUrl, parseIdList } from "../src/config.js";
+import {
+  cleanEnv,
+  isDiscordId,
+  loadConfig,
+  normalizeRobloxUrl,
+  normalizeSupabaseUrl,
+  parseIdList,
+} from "../src/config.js";
 
 test("environment values are cleaned and URLs are normalized", () => {
   assert.equal(cleanEnv(' "https://demo.supabase.co/rest/v1" '), "https://demo.supabase.co/rest/v1");
@@ -16,6 +23,45 @@ test("role ids are deduplicated and invalid values are ignored", () => {
   assert.deepEqual(
     parseIdList("1532481208490131651, 1532481208490131652", "1532481208490131651,bad"),
     ["1532481208490131651", "1532481208490131652"],
+  );
+});
+
+test("Discord IDs and Roblox purchase links are validated", () => {
+  assert.equal(isDiscordId("1532481208490131647"), true);
+  assert.equal(isDiscordId("not-an-id"), false);
+  assert.equal(
+    normalizeRobloxUrl("https://www.roblox.com/game-pass/123/example"),
+    "https://www.roblox.com/game-pass/123/example",
+  );
+  assert.equal(normalizeRobloxUrl("http://www.roblox.com/game-pass/123"), "");
+  assert.equal(normalizeRobloxUrl("https://example.com/not-roblox"), "");
+});
+
+test("production config fails fast when the dedicated guild is missing", () => {
+  assert.throws(
+    () =>
+      loadConfig({
+        DISCORD_TOKEN: "token",
+        CLIENT_ID: "1532481208490131647",
+        SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_SERVICE_ROLE_KEY: "secret",
+      }),
+    /GUILD_ID \(Discord ID\)/,
+  );
+});
+
+test("production config rejects unsafe Roblox links", () => {
+  assert.throws(
+    () =>
+      loadConfig({
+        DISCORD_TOKEN: "token",
+        CLIENT_ID: "1532481208490131647",
+        GUILD_ID: "1532481208490131648",
+        SUPABASE_URL: "https://example.supabase.co",
+        SUPABASE_SERVICE_ROLE_KEY: "secret",
+        ROBUX_LINK_10C: "https://example.com/fake-game-pass",
+      }),
+    /ROBUX_LINK_10C must be an HTTPS URL on roblox\.com/,
   );
 });
 

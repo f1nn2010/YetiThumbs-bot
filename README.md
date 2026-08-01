@@ -1,47 +1,81 @@
 # YetiThumbs Discord Bot
 
-Dedicated Discord bot for YetiThumbs. It intentionally runs only the three product commands requested for the YetiThumbs server:
+Production Discord bot for YetiThumbs support, Robux purchases, and account grants.
+It deliberately exposes exactly three guild commands:
 
-- `/setup-tickets` posts the Support / Buy with Robux panel.
-- `/grant-credits email amount` atomically adds credits to a website account.
+- `/setup-tickets` posts the Support / Buy with Robux ticket panel.
+- `/grant-credits email amount` atomically adds credits to a YetiThumbs account.
 - `/grant-premium email months` grants the Developer plan with a persisted expiry.
 
-The bot creates private sequential `ticket-1`, `ticket-2`, … channels, prevents duplicate open tickets, gives access to the customer and configured staff roles, collects the customer's YetiThumbs email and Roblox username, and provides a staff-only close button.
+The bot creates sequential private ticket channels, prevents duplicate tickets,
+restricts account grants and channel closing to staff, and stores operational
+errors in Supabase.
 
-## Setup
+## Safest setup path
 
-1. Copy `.env.example` to `.env`.
-2. Fill in Discord and Supabase values.
-3. Deploy `YetiThumbs/supabase/migrations/20260801023000_add_manual_entitlements.sql` to the website's Supabase project.
-4. Run:
+1. Install Node.js 22.
+2. Copy `.env.example` to `.env`.
+3. Fill every required value listed below.
+4. Apply all migrations from the website repository's `supabase/migrations/`
+   directory to the production Supabase project.
+5. Run the local verification and read-only live checks:
 
 ```powershell
 npm ci
-npm test
-npm run preflight
-npm start
+npm run verify
+npm run doctor
 ```
 
-The preflight is read-only: it validates the bot token, application ID, guild membership, configured staff roles, Supabase service credentials, and entitlement schema without registering commands or opening a Discord gateway connection.
+6. Start the bot with `npm start`, or push `main` and let Railway deploy it.
 
-## Required Discord setup
+`npm run doctor` never registers commands or opens a Discord gateway connection.
+It validates credentials, the guild, staff roles, bot permissions, the optional
+ticket category, the current Discord command set, and the Supabase entitlement
+schema.
 
-- Bot scopes: `bot`, `applications.commands`.
-- Bot permissions: View Channels, Send Messages, Embed Links, Attach Files, Read Message History, Manage Channels.
-- No privileged Message Content or Guild Members intent is required.
-- Set `GUILD_ID` for immediate command registration. On startup, the bot replaces that guild's command list with exactly the three YetiThumbs commands and clears stale global TitanBot commands.
+## Environment variables
 
-## Railway / Docker
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DISCORD_TOKEN` | Yes | Discord bot token. Keep secret. |
+| `CLIENT_ID` | Yes | Discord application ID. |
+| `GUILD_ID` | Yes | The one guild where the three commands are registered. |
+| `DISCORD_STAFF_ROLE_IDS` | Recommended | Comma-separated staff role IDs. |
+| `OWNER_IDS` | Optional | Comma-separated user IDs that should count as staff. |
+| `DISCORD_TICKET_CATEGORY_ID` | Recommended | Category for new private tickets. |
+| `SUPABASE_URL` | Yes | YetiThumbs Supabase project URL. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only Supabase service credential. Keep secret. |
+| `ROBUX_LINK_*` | Optional | Six HTTPS Roblox game-pass links from `.env.example`. |
+| `PORT` | Railway sets it | Health server port; defaults to `3000`. |
 
-The process exposes:
+Invalid Discord IDs and non-HTTPS/non-Roblox purchase links stop startup before
+the bot can publish a broken or unsafe workflow.
 
-- `GET /health` — process is alive.
-- `GET /ready` — Discord login, command registration, and Supabase validation succeeded.
+## Discord application permissions
 
-`railway.json` configures the Docker build, `/ready` deployment health check,
-and restart-on-failure policy automatically. The bot does not require
-PostgreSQL, Redis, Lavalink, TitanBot, or a separate web service.
+- OAuth scopes: `bot`, `applications.commands`.
+- Permissions: View Channels, Send Messages, Embed Links, Attach Files, Read
+  Message History, and Manage Channels.
+- Privileged Message Content and Guild Members intents are not required.
+
+On startup, the bot replaces the configured guild's application-command list
+with exactly the three YetiThumbs commands and clears stale global commands.
+
+## Health and deployment
+
+- `GET /health` means the process is alive.
+- `GET /ready` returns HTTP 200 only after Discord login, command registration,
+  and Supabase validation succeed.
+
+`railway.json` selects the Dockerfile, uses `/ready` as the deployment health
+check, and enables restart-on-failure. Railway can keep the service private;
+Discord gateway traffic is outbound, so a public domain is unnecessary.
+
+For deployment checks, recovery steps, and common errors, see [RUNBOOK.md](RUNBOOK.md).
 
 ## Robux links
 
-Add the six `ROBUX_LINK_*` values when the Roblox game passes exist. Until then, tickets remain usable and tell customers that staff will provide the purchase link manually.
+Tickets remain usable before the six game-pass URLs exist. When a link is unset,
+the selected package tells the customer that staff will provide the correct link
+inside the private ticket. Add the links as Railway variables later; never paste
+them into source code.
