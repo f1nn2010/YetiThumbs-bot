@@ -1,4 +1,5 @@
 import { loadConfig } from "../src/config.js";
+import { robuxLinkCoverage } from "../src/purchaseFlow.js";
 import { createYetiService } from "../src/yetiService.js";
 
 const config = loadConfig();
@@ -88,11 +89,22 @@ const health = await createYetiService(config).healthCheck();
 if (!health.entitlementSchemaReady) throw new Error(health.schemaError);
 console.log("Supabase entitlement schema and grant functions OK");
 
-const missingLinks = Object.values(config.robuxPackages).filter((item) => !item.link);
-if (missingLinks.length) {
+const linkCoverage = robuxLinkCoverage(config);
+const missingLinkCount = linkCoverage.total - linkCoverage.configured;
+if (missingLinkCount) {
   console.warn(
-    `Warning: ${missingLinks.length} Robux links are unset; tickets will ask staff to provide a link.`,
+    `Warning: ${missingLinkCount} Robux links are unset; tickets will ask staff to provide a link.`,
   );
 }
-console.log(`Robux purchase links: ${6 - missingLinks.length}/6 configured`);
+const missingPremiumPrices = Object.values(config.premiumPlans).filter(
+  (plan) => !Number.isSafeInteger(plan.monthlyRobuxPrice),
+);
+if (missingPremiumPrices.length) {
+  console.warn(
+    `Warning: ${missingPremiumPrices.length} premium Robux price(s) are unset; tickets will ask staff to confirm the price.`,
+  );
+}
+console.log(
+  `Robux purchase links: ${linkCoverage.configured}/${linkCoverage.total} configured`,
+);
 console.log("Preflight complete");

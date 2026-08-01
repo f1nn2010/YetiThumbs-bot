@@ -28,7 +28,7 @@ export const commands = [
     ),
   new SlashCommandBuilder()
     .setName("grant-premium")
-    .setDescription("Staff: grant the Developer plan to an account by email")
+    .setDescription("Staff: grant a premium plan to an account by email")
     .addStringOption((option) =>
       option
         .setName("email")
@@ -36,6 +36,17 @@ export const commands = [
         .setRequired(true)
         .setMinLength(3)
         .setMaxLength(254),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("plan")
+        .setDescription("Premium level purchased by the customer")
+        .setRequired(true)
+        .addChoices(
+          { name: "Starter (40 credits/month)", value: "starter" },
+          { name: "Developer (90 credits/month)", value: "developer" },
+          { name: "Enterprise (350 credits/month)", value: "enterprise" },
+        ),
     )
     .addIntegerOption((option) =>
       option

@@ -80,6 +80,16 @@ function integer(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {
   return parsed;
 }
 
+function optionalPositiveInteger(value, name) {
+  const raw = cleanEnv(value);
+  if (!raw) return null;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 10000000) {
+    throw new Error(`${name} must be a whole Robux amount between 1 and 10000000`);
+  }
+  return parsed;
+}
+
 export function loadConfig(env = process.env) {
   const config = {
     token: cleanEnv(env.DISCORD_TOKEN || env.TOKEN),
@@ -102,9 +112,7 @@ export function loadConfig(env = process.env) {
     ),
     host: cleanEnv(env.WEB_HOST) || "0.0.0.0",
     port: integer(env.PORT, 3000, { min: 1, max: 65535 }),
-    premiumPlan: "developer",
-    premiumCredits: 90,
-    robuxPackages: {
+    creditPackages: {
       pkg_10c: {
         label: "10 Credits",
         price: 1100,
@@ -123,23 +131,71 @@ export function loadConfig(env = process.env) {
         credits: 90,
         link: optionalRobloxUrl(env.ROBUX_LINK_90C, "ROBUX_LINK_90C"),
       },
-      pkg_1m: {
-        label: "1 Month Premium",
-        price: 1200,
-        months: 1,
-        link: optionalRobloxUrl(env.ROBUX_LINK_1M, "ROBUX_LINK_1M"),
+    },
+    premiumPlans: {
+      starter: {
+        label: "Starter",
+        credits: 40,
+        monthlyRobuxPrice: optionalPositiveInteger(
+          env.ROBUX_PRICE_STARTER_MONTHLY,
+          "ROBUX_PRICE_STARTER_MONTHLY",
+        ),
+        links: {
+          1: optionalRobloxUrl(env.ROBUX_LINK_STARTER_1M, "ROBUX_LINK_STARTER_1M"),
+          3: optionalRobloxUrl(env.ROBUX_LINK_STARTER_3M, "ROBUX_LINK_STARTER_3M"),
+          6: optionalRobloxUrl(env.ROBUX_LINK_STARTER_6M, "ROBUX_LINK_STARTER_6M"),
+        },
       },
-      pkg_3m: {
-        label: "3 Months Premium",
-        price: 3600,
-        months: 3,
-        link: optionalRobloxUrl(env.ROBUX_LINK_3M, "ROBUX_LINK_3M"),
+      developer: {
+        label: "Developer",
+        credits: 90,
+        monthlyRobuxPrice:
+          optionalPositiveInteger(
+            env.ROBUX_PRICE_DEVELOPER_MONTHLY,
+            "ROBUX_PRICE_DEVELOPER_MONTHLY",
+          ) ?? 1200,
+        links: {
+          1: optionalRobloxUrl(
+            env.ROBUX_LINK_DEVELOPER_1M || env.ROBUX_LINK_1M,
+            env.ROBUX_LINK_DEVELOPER_1M
+              ? "ROBUX_LINK_DEVELOPER_1M"
+              : "ROBUX_LINK_1M",
+          ),
+          3: optionalRobloxUrl(
+            env.ROBUX_LINK_DEVELOPER_3M || env.ROBUX_LINK_3M,
+            env.ROBUX_LINK_DEVELOPER_3M
+              ? "ROBUX_LINK_DEVELOPER_3M"
+              : "ROBUX_LINK_3M",
+          ),
+          6: optionalRobloxUrl(
+            env.ROBUX_LINK_DEVELOPER_6M || env.ROBUX_LINK_6M,
+            env.ROBUX_LINK_DEVELOPER_6M
+              ? "ROBUX_LINK_DEVELOPER_6M"
+              : "ROBUX_LINK_6M",
+          ),
+        },
       },
-      pkg_6m: {
-        label: "6 Months Premium",
-        price: 7200,
-        months: 6,
-        link: optionalRobloxUrl(env.ROBUX_LINK_6M, "ROBUX_LINK_6M"),
+      enterprise: {
+        label: "Enterprise",
+        credits: 350,
+        monthlyRobuxPrice: optionalPositiveInteger(
+          env.ROBUX_PRICE_ENTERPRISE_MONTHLY,
+          "ROBUX_PRICE_ENTERPRISE_MONTHLY",
+        ),
+        links: {
+          1: optionalRobloxUrl(
+            env.ROBUX_LINK_ENTERPRISE_1M,
+            "ROBUX_LINK_ENTERPRISE_1M",
+          ),
+          3: optionalRobloxUrl(
+            env.ROBUX_LINK_ENTERPRISE_3M,
+            "ROBUX_LINK_ENTERPRISE_3M",
+          ),
+          6: optionalRobloxUrl(
+            env.ROBUX_LINK_ENTERPRISE_6M,
+            "ROBUX_LINK_ENTERPRISE_6M",
+          ),
+        },
       },
     },
   };

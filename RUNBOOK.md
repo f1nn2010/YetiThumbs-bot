@@ -39,7 +39,7 @@ online indicator or an external monitor for continuous availability checks.
 | Ticket category error | Copy the category ID with Discord Developer Mode; do not use a channel ID. |
 | Supabase schema error | Apply all website migrations, then rerun `npm run doctor`. |
 | Commands look stale | Restart/redeploy once; startup replaces the guild commands and clears global commands. |
-| Robux links are missing | Tickets still work. Staff can provide links manually until the six Railway variables are added. |
+| Robux prices or links are missing | Tickets still work. Staff confirms the price or provides the link until its Railway variable is added. |
 
 ## Rollback
 

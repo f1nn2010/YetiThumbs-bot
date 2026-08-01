@@ -5,7 +5,8 @@ It deliberately exposes exactly three guild commands:
 
 - `/setup-tickets` posts the Support / Buy with Robux ticket panel.
 - `/grant-credits email amount` atomically adds credits to a YetiThumbs account.
-- `/grant-premium email months` grants the Developer plan with a persisted expiry.
+- `/grant-premium email plan months` grants Starter, Developer, or Enterprise
+  with the matching monthly credits and a persisted expiry.
 
 The bot creates sequential private ticket channels, prevents duplicate tickets,
 restricts account grants and channel closing to staff, and stores operational
@@ -46,7 +47,8 @@ schema.
 | `DISCORD_TICKET_CATEGORY_ID` | Recommended | Category for new private tickets. |
 | `SUPABASE_URL` | Yes | YetiThumbs Supabase project URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only Supabase service credential. Keep secret. |
-| `ROBUX_LINK_*` | Optional | Six HTTPS Roblox game-pass links from `.env.example`. |
+| `ROBUX_PRICE_*_MONTHLY` | Recommended | Monthly Robux price for each premium level. |
+| `ROBUX_LINK_*` | Optional | HTTPS Roblox game-pass links from `.env.example`. |
 | `PORT` | Railway sets it | Health server port; defaults to `3000`. |
 
 Invalid Discord IDs and non-HTTPS/non-Roblox purchase links stop startup before
@@ -78,9 +80,16 @@ traffic is outbound, so a public domain is unnecessary.
 
 For deployment checks, recovery steps, and common errors, see [RUNBOOK.md](RUNBOOK.md).
 
-## Robux links
+## Robux purchase flow
 
-Tickets remain usable before the six game-pass URLs exist. When a link is unset,
-the selected package tells the customer that staff will provide the correct link
-inside the private ticket. Add the links as Railway variables later; never paste
-them into source code.
+Customers first choose **Credits** or **Premium**. Credits then shows the three
+one-time packages. Premium asks for Starter, Developer, or Enterprise and then a
+1, 3, or 6 month duration. The matching level is also required by
+`/grant-premium`, preventing staff from accidentally granting Developer for a
+Starter or Enterprise purchase.
+
+Developer retains the recovered price of 1,200 Robux per month. Starter and
+Enterprise prices are deliberately unset until their real amounts are added as
+Railway variables. Tickets remain usable: when a price or link is unset, the bot
+clearly asks staff to confirm or provide it. Never paste purchase URLs or secrets
+into source code.

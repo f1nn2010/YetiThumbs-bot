@@ -15,3 +15,13 @@ test("configured staff roles are not blocked by Administrator-only command defau
     assert.match(command.description, /^Staff:/);
   }
 });
+
+test("grant-premium requires a supported premium level", () => {
+  const command = commands.find((item) => item.name === "grant-premium");
+  const plan = command.options.find((option) => option.name === "plan");
+  assert.equal(plan.required, true);
+  assert.deepEqual(
+    plan.choices.map((choice) => choice.value),
+    ["starter", "developer", "enterprise"],
+  );
+});

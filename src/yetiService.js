@@ -70,11 +70,15 @@ export function createYetiService(config, options = {}) {
     return { user, credits: numericCredits };
   }
 
-  async function grantPremium(email, months) {
+  async function grantPremium(email, planId, months) {
     if (!Number.isInteger(months) || months < 1 || months > 36) {
       throw userError(
         "Premium duration must be a whole number between 1 and 36 months.",
       );
+    }
+    const plan = config.premiumPlans[planId];
+    if (!plan) {
+      throw userError("Choose Starter, Developer, or Enterprise premium.");
     }
     const user = await findUserByEmail(email);
     const { data: rpcData, error: rpcError } = await supabase.rpc(
@@ -82,8 +86,8 @@ export function createYetiService(config, options = {}) {
       {
         p_user_id: user.id,
         p_email: user.email,
-        p_plan: config.premiumPlan,
-        p_credits: config.premiumCredits,
+        p_plan: planId,
+        p_credits: plan.credits,
         p_months: months,
       },
     );
@@ -102,6 +106,9 @@ export function createYetiService(config, options = {}) {
     }
     return {
       user,
+      planId,
+      planLabel: plan.label,
+      monthlyCredits: plan.credits,
       credits,
       expiresAt,
       expiryPersisted: true,

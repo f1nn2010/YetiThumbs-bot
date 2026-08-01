@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 import { createYetiService } from "../src/yetiService.js";
 
 const config = {
-  premiumPlan: "developer",
-  premiumCredits: 90,
+  premiumPlans: {
+    starter: { label: "Starter", credits: 40 },
+    developer: { label: "Developer", credits: 90 },
+    enterprise: { label: "Enterprise", credits: 350 },
+  },
   supabaseUrl: "https://example.supabase.co",
   supabaseKey: "test-key",
 };
@@ -40,12 +43,16 @@ test("grantCredits uses the atomic Supabase function", async () => {
   ]);
 });
 
-test("grantPremium returns the persisted expiry from Supabase", async () => {
+test("grantPremium persists the selected premium level and its monthly credits", async () => {
   const expiresAt = "2026-11-01T12:00:00.000Z";
-  const { service, calls } = serviceWithRpc([{ credits: 90, expires_at: expiresAt }]);
-  const result = await service.grantPremium("creator@example.com", 3);
+  const { service, calls } = serviceWithRpc([{ credits: 350, expires_at: expiresAt }]);
+  const result = await service.grantPremium("creator@example.com", "enterprise", 3);
 
   assert.equal(result.expiryPersisted, true);
+  assert.equal(result.planId, "enterprise");
+  assert.equal(result.planLabel, "Enterprise");
+  assert.equal(result.monthlyCredits, 350);
+  assert.equal(result.credits, 350);
   assert.equal(result.expiresAt.toISOString(), expiresAt);
   assert.deepEqual(calls, [
     [
@@ -53,8 +60,8 @@ test("grantPremium returns the persisted expiry from Supabase", async () => {
       {
         p_user_id: "user-1",
         p_email: "Creator@Example.com",
-        p_plan: "developer",
-        p_credits: 90,
+        p_plan: "enterprise",
+        p_credits: 350,
         p_months: 3,
       },
     ],
@@ -89,7 +96,7 @@ test("grant operations fail closed when the atomic database function is missing"
       error.publicMessage === undefined,
   );
   await assert.rejects(
-    service.grantPremium("creator@example.com", 1),
+    service.grantPremium("creator@example.com", "developer", 1),
     (error) =>
       /Premium grant failed: Function not found/.test(error.message) &&
       error.publicMessage === undefined,
@@ -104,8 +111,12 @@ test("grant operations validate bounds before querying customer accounts", async
     /between 1 and 100000/,
   );
   await assert.rejects(
-    service.grantPremium("creator@example.com", 37),
+    service.grantPremium("creator@example.com", "developer", 37),
     /between 1 and 36/,
+  );
+  await assert.rejects(
+    service.grantPremium("creator@example.com", "ultra", 1),
+    /Starter, Developer, or Enterprise/,
   );
   assert.deepEqual(calls, []);
 });

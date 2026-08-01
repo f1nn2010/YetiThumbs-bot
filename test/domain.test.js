@@ -10,6 +10,14 @@ import {
   parseIdList,
 } from "../src/config.js";
 
+const validEnvironment = {
+  DISCORD_TOKEN: "token",
+  CLIENT_ID: "1532481208490131647",
+  GUILD_ID: "1532481208490131648",
+  SUPABASE_URL: "https://example.supabase.co",
+  SUPABASE_SERVICE_ROLE_KEY: "secret",
+};
+
 test("environment values are cleaned and URLs are normalized", () => {
   assert.equal(cleanEnv(' "https://demo.supabase.co/rest/v1" '), "https://demo.supabase.co/rest/v1");
   assert.equal(
@@ -62,6 +70,34 @@ test("production config rejects unsafe Roblox links", () => {
         ROBUX_LINK_10C: "https://example.com/fake-game-pass",
       }),
     /ROBUX_LINK_10C must be an HTTPS URL on roblox\.com/,
+  );
+});
+
+test("production config models all premium levels without inventing prices", () => {
+  const config = loadConfig({
+    ...validEnvironment,
+    ROBUX_PRICE_STARTER_MONTHLY: "600",
+    ROBUX_LINK_DEVELOPER_3M:
+      "https://www.roblox.com/game-pass/123/developer-three-months",
+  });
+
+  assert.equal(config.premiumPlans.starter.credits, 40);
+  assert.equal(config.premiumPlans.starter.monthlyRobuxPrice, 600);
+  assert.equal(config.premiumPlans.developer.credits, 90);
+  assert.equal(config.premiumPlans.developer.monthlyRobuxPrice, 1200);
+  assert.equal(config.premiumPlans.enterprise.credits, 350);
+  assert.equal(config.premiumPlans.enterprise.monthlyRobuxPrice, null);
+  assert.match(config.premiumPlans.developer.links[3], /developer-three-months/);
+});
+
+test("production config rejects malformed Robux prices", () => {
+  assert.throws(
+    () =>
+      loadConfig({
+        ...validEnvironment,
+        ROBUX_PRICE_ENTERPRISE_MONTHLY: "68.88",
+      }),
+    /ROBUX_PRICE_ENTERPRISE_MONTHLY must be a whole Robux amount/,
   );
 });
 

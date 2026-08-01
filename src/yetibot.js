@@ -27,6 +27,16 @@ import {
   publicErrorMessage,
   respondEphemeral,
 } from "./responses.js";
+import {
+  creditPackageMenu,
+  formatMonthlyRobux,
+  formatRobux,
+  premiumDurationMenu,
+  premiumPurchase,
+  premiumTierMenu,
+  purchaseTypeMenu,
+  robuxLinkCoverage,
+} from "./purchaseFlow.js";
 import { createYetiService } from "./yetiService.js";
 
 const config = loadConfig();
@@ -109,7 +119,7 @@ async function setupTickets(interaction) {
       new StringSelectMenuOptionBuilder()
         .setLabel("Buy with Robux")
         .setEmoji("💎")
-        .setDescription("Credits or Developer premium")
+        .setDescription("Credits or Starter, Developer, and Enterprise premium")
         .setValue("robux"),
     );
 
@@ -130,19 +140,27 @@ function closeButton() {
   );
 }
 
-function robuxMenu() {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId("robux_package_select")
-    .setPlaceholder("Choose a credits or premium package");
+function purchaseEmbed(title, lines) {
+  return new EmbedBuilder()
+    .setColor(0x64f2b6)
+    .setTitle(title)
+    .setDescription([...lines, "", "Card or PayPal: https://yetithumbs.com/pricing"].join("\n"))
+    .setFooter({ text: "Never send passwords, tokens, or payment card details." });
+}
 
-  for (const [value, item] of Object.entries(config.robuxPackages)) {
-    menu.addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel(`${item.label} (${item.price.toLocaleString("en-GB")} R$)`)
-        .setValue(value),
+async function requireTicketCustomer(interaction) {
+  const topic = String(interaction.channel?.topic ?? "");
+  if (
+    !isTicketForUser(interaction.channel, interaction.user.id) ||
+    !topic.includes("kind=robux")
+  ) {
+    await respondEphemeral(
+      interaction,
+      "Only the customer who opened this Robux ticket can make its purchase selections.",
     );
+    return false;
   }
-  return new ActionRowBuilder().addComponents(menu);
+  return true;
 }
 
 async function createTicket(interaction) {
@@ -223,35 +241,70 @@ async function createTicket(interaction) {
       return;
     }
 
-    const prices = Object.values(config.robuxPackages)
-      .map((item) => `• ${item.label} — ${item.price.toLocaleString("en-GB")} R$`)
-      .join("\n");
     await channel.send({
       content: `${interaction.user} ${staffMention()}`,
       embeds: [
-        new EmbedBuilder()
-          .setColor(0x64f2b6)
-          .setTitle("Buy YetiThumbs with Robux")
-          .setDescription(
-            [
-              "Choose a package below, then send your YetiThumbs email, Roblox username, and purchase screenshot.",
-              "",
-              prices,
-              "",
-              "Card or PayPal: https://yetithumbs.com/pricing",
-            ].join("\n"),
-          ),
+        purchaseEmbed("Buy YetiThumbs with Robux", [
+          "Choose whether you want one-time credits or a premium plan.",
+          "Premium includes Starter, Developer, and Enterprise levels.",
+        ]),
       ],
-      components: [robuxMenu(), closeButton()],
+      components: [purchaseTypeMenu(), closeButton()],
     });
   });
 }
 
-async function selectRobuxPackage(interaction) {
-  const item = config.robuxPackages[interaction.values[0]];
+async function selectPurchaseType(interaction) {
+  if (!(await requireTicketCustomer(interaction))) return;
+  const type = interaction.values[0];
+  if (type === "credits") {
+    const prices = Object.values(config.creditPackages).map(
+      (item) => `• **${item.label}:** ${formatRobux(item.price)}`,
+    );
+    return interaction.update({
+      embeds: [
+        purchaseEmbed("Choose a Credits Package", [
+          "Credits are added once after staff verifies the Roblox purchase.",
+          "",
+          ...prices,
+        ]),
+      ],
+      components: [creditPackageMenu(config), closeButton()],
+    });
+  }
+  if (type === "premium") {
+    const levels = Object.values(config.premiumPlans).map(
+      (plan) =>
+        `• **${plan.label}:** ${plan.credits} credits/month · ${formatMonthlyRobux(plan.monthlyRobuxPrice)}`,
+    );
+    return interaction.update({
+      embeds: [
+        purchaseEmbed("Choose a Premium Level", [
+          "Premium credits refresh monthly while the grant is active.",
+          "",
+          ...levels,
+        ]),
+      ],
+      components: [premiumTierMenu(config), closeButton()],
+    });
+  }
+  return respondEphemeral(interaction, "That purchase type is not available.");
+}
+
+async function selectCreditPackage(interaction) {
+  if (!(await requireTicketCustomer(interaction))) return;
+  const item = config.creditPackages[interaction.values[0]];
   if (!item) return respondEphemeral(interaction, "That package is not available.");
 
-  await interaction.update({ components: [closeButton()] });
+  await interaction.update({
+    embeds: [
+      purchaseEmbed("Credits Package Selected", [
+        `You selected **${item.label}** for **${formatRobux(item.price)}**.`,
+        "Follow the instructions posted below.",
+      ]),
+    ],
+    components: [closeButton()],
+  });
   const purchaseLine = item.link
     ? `Purchase link: ${item.link}`
     : "A staff member will provide the purchase link in this ticket.";
@@ -264,7 +317,63 @@ async function selectRobuxPackage(interaction) {
       `3. ${purchaseLine}`,
       "4. Upload a screenshot showing the completed purchase.",
       "",
-      `${staffMention()} will verify it, then use the matching grant command.`,
+      `${staffMention()} will verify it, then use `/grant-credits` for **${item.credits} credits**.`,
+    ].join("\n"),
+  });
+}
+
+async function selectPremiumTier(interaction) {
+  if (!(await requireTicketCustomer(interaction))) return;
+  const planId = interaction.values[0];
+  const plan = config.premiumPlans[planId];
+  if (!plan) return respondEphemeral(interaction, "That premium level is not available.");
+
+  return interaction.update({
+    embeds: [
+      purchaseEmbed(`Choose ${plan.label} Duration`, [
+        `**${plan.label} Premium** includes **${plan.credits} credits every month**.`,
+        `Monthly Robux price: **${formatMonthlyRobux(plan.monthlyRobuxPrice)}**.`,
+      ]),
+    ],
+    components: [premiumDurationMenu(config, planId), closeButton()],
+  });
+}
+
+async function selectPremiumDuration(interaction) {
+  if (!(await requireTicketCustomer(interaction))) return;
+  const planId = interaction.customId.split(":")[1];
+  const purchase = premiumPurchase(config, planId, interaction.values[0]);
+  if (!purchase) return respondEphemeral(interaction, "That premium option is not available.");
+
+  await interaction.update({
+    embeds: [
+      purchaseEmbed("Premium Package Selected", [
+        `You selected **${purchase.label} Premium** for **${purchase.months} month(s)**.`,
+        `Includes **${purchase.credits} credits every month**.`,
+        `Robux price: **${formatRobux(purchase.price)}**.`,
+        "Follow the instructions posted below.",
+      ]),
+    ],
+    components: [closeButton()],
+  });
+
+  const priceLine = Number.isSafeInteger(purchase.price)
+    ? `Price: **${formatRobux(purchase.price)}**.`
+    : "A staff member will confirm the Robux price before you purchase.";
+  const purchaseLine = purchase.link
+    ? `Purchase link: ${purchase.link}`
+    : "A staff member will provide the matching purchase link in this ticket.";
+  return interaction.channel.send({
+    content: [
+      `${interaction.user} selected **${purchase.label} Premium** for **${purchase.months} month(s)**.`,
+      `Entitlement: **${purchase.credits} credits every month**. ${priceLine}`,
+      "",
+      "1. Send the email on your YetiThumbs account.",
+      "2. Send your Roblox username.",
+      `3. ${purchaseLine}`,
+      "4. Upload a screenshot showing the completed purchase.",
+      "",
+      `${staffMention()} will verify it, then use `/grant-premium` with plan **${purchase.label}** and **${purchase.months} month(s)**.`,
     ].join("\n"),
   });
 }
@@ -289,14 +398,15 @@ async function grantPremium(interaction) {
   }
   await deferEphemeral(interaction);
   const email = interaction.options.getString("email", true);
+  const planId = interaction.options.getString("plan", true);
   const months = interaction.options.getInteger("months", true);
-  const result = await yeti.grantPremium(email, months);
+  const result = await yeti.grantPremium(email, planId, months);
   const expiryNote = result.expiryPersisted
     ? `Expires: **${result.expiresAt.toUTCString()}**.`
     : "The plan was granted, but the website entitlement migration must be deployed before automatic expiry works.";
   return respondEphemeral(
     interaction,
-    `Granted **Developer** premium and **${result.credits} credits** to **${result.user.email}** for **${months} month(s)**. ${expiryNote}`,
+    `Granted **${result.planLabel}** premium (**${result.monthlyCredits} credits/month**) to **${result.user.email}** for **${months} month(s)**. Current balance: **${result.credits}**. ${expiryNote}`,
   );
 }
 
@@ -399,8 +509,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "ticket_select") return await createTicket(interaction);
-      if (interaction.customId === "robux_package_select") {
-        return await selectRobuxPackage(interaction);
+      if (interaction.customId === "purchase_type_select") {
+        return await selectPurchaseType(interaction);
+      }
+      if (interaction.customId === "credit_package_select") {
+        return await selectCreditPackage(interaction);
+      }
+      if (interaction.customId === "premium_tier_select") {
+        return await selectPremiumTier(interaction);
+      }
+      if (interaction.customId.startsWith("premium_duration_select:")) {
+        return await selectPremiumDuration(interaction);
       }
       return;
     }
@@ -457,9 +576,10 @@ process.once("SIGINT", () => void shutdown("SIGINT"));
 process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 console.log("Starting YetiThumbs bot");
+const linkCoverage = robuxLinkCoverage(config);
 console.log(
   `Configuration: guild ${config.guildId}; ${config.staffRoleIds.length} staff role(s); ` +
     `ticket category ${config.ticketCategoryId || "server root"}; ` +
-    `${Object.values(config.robuxPackages).filter((item) => item.link).length}/6 Robux link(s)`,
+    `${linkCoverage.configured}/${linkCoverage.total} Robux link(s)`,
 );
 await client.login(config.token);

@@ -8,7 +8,7 @@
     "start": "node src/yetibot.js",
     "preflight": "node scripts/preflight.js",
     "smoke": "node scripts/live-smoke.js",
-    "check": "node --check src/commands.js && node --check src/config.js && node --check src/domain.js && node --check src/responses.js && node --check src/yetiService.js && node --check src/yetibot.js && node --check scripts/preflight.js && node --check scripts/live-smoke.js",
+    "check": "node --check src/commands.js && node --check src/config.js && node --check src/domain.js && node --check src/purchaseFlow.js && node --check src/responses.js && node --check src/yetiService.js && node --check src/yetibot.js && node --check scripts/preflight.js && node --check scripts/live-smoke.js",
     "test": "node --test test/*.test.js",
     "verify": "npm run check && npm test",
     "doctor": "npm run preflight"

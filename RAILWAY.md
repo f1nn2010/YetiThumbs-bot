@@ -37,14 +37,25 @@ OWNER_IDS=
 ROBUX_LINK_10C=
 ROBUX_LINK_40C=
 ROBUX_LINK_90C=
-ROBUX_LINK_1M=
-ROBUX_LINK_3M=
-ROBUX_LINK_6M=
+ROBUX_PRICE_STARTER_MONTHLY=
+ROBUX_PRICE_DEVELOPER_MONTHLY=1200
+ROBUX_PRICE_ENTERPRISE_MONTHLY=
+ROBUX_LINK_STARTER_1M=
+ROBUX_LINK_STARTER_3M=
+ROBUX_LINK_STARTER_6M=
+ROBUX_LINK_DEVELOPER_1M=
+ROBUX_LINK_DEVELOPER_3M=
+ROBUX_LINK_DEVELOPER_6M=
+ROBUX_LINK_ENTERPRISE_1M=
+ROBUX_LINK_ENTERPRISE_3M=
+ROBUX_LINK_ENTERPRISE_6M=
 ```
 
-Use comma-separated Discord IDs for multiple staff roles or owners. Leave the
-six Robux links unset until the real HTTPS `roblox.com` game-pass URLs exist;
-the ticket flow remains safe and asks staff for the correct link.
+Use comma-separated Discord IDs for multiple staff roles or owners. Leave Robux
+prices or links unset until the real amounts and HTTPS `roblox.com` game-pass
+URLs exist; the ticket flow remains safe and asks staff to confirm missing data.
+Developer defaults to the recovered 1,200 Robux/month price. Starter and
+Enterprise do not guess a price.
 
 Do not create `PORT` or `WEB_HOST` variables. Railway injects `PORT`, and the bot
 already listens on `0.0.0.0`.
@@ -65,8 +76,9 @@ ONLINE: 3 commands, 1 guild(s)
    returned HTTP 200.
 5. In Discord, confirm the bot is online and run `/setup-tickets` once in the
    channel where the permanent ticket panel belongs.
-6. Open one Support test ticket, verify only the customer and staff can see it,
-   then close it with the button.
+6. Open one Robux test ticket and verify both guided paths:
+   **Credits > package** and **Premium > level > duration**.
+7. Verify only the customer and staff can see the ticket, then close it.
 
 No card charge, Stripe action, or Supabase data grant is required for this
 deployment check. Test `/grant-credits` only with an account and amount that the
