@@ -38,7 +38,9 @@ The process exposes:
 - `GET /health` — process is alive.
 - `GET /ready` — Discord login, command registration, and Supabase validation succeeded.
 
-Set Railway's health check to `/ready`. The bot does not require PostgreSQL, Redis, Lavalink, TitanBot, or a separate web service.
+`railway.json` configures the Docker build, `/ready` deployment health check,
+and restart-on-failure policy automatically. The bot does not require
+PostgreSQL, Redis, Lavalink, TitanBot, or a separate web service.
 
 ## Robux links
 
