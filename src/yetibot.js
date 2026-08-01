@@ -459,6 +459,7 @@ process.once("SIGTERM", () => void shutdown("SIGTERM"));
 console.log("Starting YetiThumbs bot");
 console.log(
   `Configuration: guild ${config.guildId}; ${config.staffRoleIds.length} staff role(s); ` +
+    `ticket category ${config.ticketCategoryId || "server root"}; ` +
     `${Object.values(config.robuxPackages).filter((item) => item.link).length}/6 Robux link(s)`,
 );
 await client.login(config.token);
