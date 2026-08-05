@@ -68,8 +68,8 @@ already listens on `0.0.0.0`.
 
 ```text
 Discord connected as YetiThumbs#4720
-Registered 3 commands in guild ...
-ONLINE: 3 commands, 1 guild(s)
+Registered 5 commands in guild ...
+ONLINE: 5 commands, 1 guild(s)
 ```
 
 4. Railway must show the deployment as **Active**, which proves `/ready`

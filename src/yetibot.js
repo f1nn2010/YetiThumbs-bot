@@ -567,6 +567,16 @@ async function createPartnership(interaction) {
     );
   } catch (error) {
     if (channel) await channel.delete("Partnership setup failed").catch(() => {});
+    if (
+      /relation .* does not exist|column .* does not exist|schema cache/i.test(
+        String(error?.message ?? ""),
+      )
+    ) {
+      return respondEphemeral(
+        interaction,
+        "Partnerships are not enabled on the website database yet. Deploy the latest Supabase migration, then try again.",
+      );
+    }
     throw error;
   }
 }
