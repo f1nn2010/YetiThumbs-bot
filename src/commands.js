@@ -80,4 +80,36 @@ export const commands = [
         .setMinValue(1)
         .setMaxValue(1000000),
     ),
+  new SlashCommandBuilder()
+    .setName("create-partnership")
+    .setDescription("Staff: create a partner discount deal and private sales channel")
+    .addStringOption((option) =>
+      option
+        .setName("code")
+        .setDescription("Discount code customers enter at signup")
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(32),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("percent")
+        .setDescription("Percentage discount (1-100)")
+        .setRequired(true)
+        .setMinValue(1)
+        .setMaxValue(100),
+    )
+    .addUserOption((option) =>
+      option
+        .setName("partner")
+        .setDescription("Partner who can see the private sales channel")
+        .setRequired(true),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("months")
+        .setDescription("Subscription months receiving the discount (1-36)")
+        .setMinValue(1)
+        .setMaxValue(36),
+    ),
 ].map((command) => command.toJSON());

@@ -5,7 +5,13 @@ import { commands } from "../src/commands.js";
 test("the bot publishes the intended guild commands", () => {
   assert.deepEqual(
     commands.map((command) => command.name).sort(),
-    ["create-link", "grant-credits", "grant-premium", "setup-tickets"],
+    [
+      "create-link",
+      "create-partnership",
+      "grant-credits",
+      "grant-premium",
+      "setup-tickets",
+    ],
   );
 });
 
@@ -19,6 +25,17 @@ test("create-link exposes credit controls only", () => {
     command.options[0].choices.map((choice) => choice.value),
     ["credits"],
   );
+});
+
+test("create-partnership requires a code, discount, partner, and duration", () => {
+  const command = commands.find((item) => item.name === "create-partnership");
+  assert.deepEqual(
+    command.options.map((option) => option.name),
+    ["code", "percent", "partner", "months"],
+  );
+  assert.equal(command.options.find((option) => option.name === "code").required, true);
+  assert.equal(command.options.find((option) => option.name === "percent").required, true);
+  assert.equal(command.options.find((option) => option.name === "partner").required, true);
 });
 
 test("configured staff roles are not blocked by Administrator-only command defaults", () => {

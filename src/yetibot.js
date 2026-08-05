@@ -473,6 +473,104 @@ async function createPromoLink(interaction) {
     );
 }
 
+async function createPartnership(interaction) {
+  if (!isStaff(interaction.member)) {
+    return respondEphemeral(interaction, "Only configured staff can create partnership deals.");
+  }
+  if (!interaction.guild) {
+    return respondEphemeral(interaction, "This command must be used inside the configured server.");
+  }
+  await deferEphemeral(interaction);
+
+  const code = interaction.options.getString("code", true).trim().toUpperCase();
+  const percentOff = interaction.options.getInteger("percent", true);
+  const partner = interaction.options.getUser("partner", true);
+  const durationMonths = interaction.options.getInteger("months") ?? 1;
+  const safeCode = code.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 70);
+  const channelName = `partnership-${safeCode}`;
+  const permissionOverwrites = [
+    {
+      id: interaction.guild.id,
+      deny: [PermissionFlagsBits.ViewChannel],
+    },
+    {
+      id: partner.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+      ],
+    },
+    {
+      id: client.user.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.ManageWebhooks,
+      ],
+    },
+    ...config.staffRoleIds.map((id) => ({
+      id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.ManageWebhooks,
+      ],
+    })),
+  ];
+
+  let channel;
+  try {
+    channel = await interaction.guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      topic: `YetiThumbs partnership ${code} for ${partner.id}`,
+      permissionOverwrites,
+      reason: `Partnership deal ${code} created by ${interaction.user.tag}`,
+    });
+    const webhook = await channel.createWebhook({ name: "YetiThumbs Partnership" });
+    const deal = await yeti.createPartnershipDeal({
+      code,
+      percentOff,
+      durationMonths,
+      partnerId: partner.id,
+      guildId: interaction.guild.id,
+      channelId: channel.id,
+      webhookUrl: webhook.url,
+      createdBy: interaction.user.id,
+    });
+
+    await channel.send({
+      content: `${partner} ${staffMention()}`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x64f2b6)
+          .setTitle("YetiThumbs partnership deal")
+          .setDescription("This private channel tracks every paid subscription using the partner code.")
+          .addFields(
+            { name: "Code", value: `\`${deal.code}\``, inline: true },
+            { name: "Discount", value: `${deal.percent_off}% off`, inline: true },
+            { name: "Duration", value: `${deal.duration_months} month(s)`, inline: true },
+            { name: "Sales total", value: "$0.00 USD", inline: true },
+          )
+          .setFooter({ text: "Only configured staff and the partner can view this channel." }),
+      ],
+    });
+
+    return respondEphemeral(
+      interaction,
+      `Created partnership **${deal.code}** (${deal.percent_off}% off for ${deal.duration_months} month(s)) in ${channel}.`,
+    );
+  } catch (error) {
+    if (channel) await channel.delete("Partnership setup failed").catch(() => {});
+    throw error;
+  }
+}
+
 async function closeTicket(interaction) {
   if (!isStaff(interaction.member)) {
     return respondEphemeral(interaction, "Only configured staff can close tickets.");
@@ -569,6 +667,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "grant-credits") return await grantCredits(interaction);
       if (interaction.commandName === "grant-premium") return await grantPremium(interaction);
       if (interaction.commandName === "create-link") return await createPromoLink(interaction);
+      if (interaction.commandName === "create-partnership") return await createPartnership(interaction);
       return;
     }
     if (interaction.isStringSelectMenu()) {

@@ -219,6 +219,49 @@ export function createYetiService(config, options = {}) {
     return { ...data, url: `${config.publicAppUrl}/signup?promo=${encodeURIComponent(data.code)}` };
   }
 
+  async function createPartnershipDeal({
+    code,
+    percentOff,
+    durationMonths,
+    partnerId,
+    guildId,
+    channelId,
+    webhookUrl,
+    createdBy,
+  }) {
+    const normalizedCode = String(code ?? "").trim().toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(normalizedCode)) {
+      throw userError("Code must be 3-32 characters and use only letters, numbers, hyphens, or underscores.");
+    }
+    if (!Number.isInteger(percentOff) || percentOff < 1 || percentOff > 100) {
+      throw userError("Discount must be a whole percentage between 1 and 100.");
+    }
+    if (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 36) {
+      throw userError("Discount duration must be between 1 and 36 months.");
+    }
+    const { data, error } = await supabase
+      .from("yetithumbs_promo_links")
+      .insert({
+        code: normalizedCode,
+        kind: "discount",
+        percent_off: percentOff,
+        duration_months: durationMonths,
+        credits: null,
+        created_by_discord_id: String(createdBy),
+        partner_discord_id: String(partnerId),
+        partner_guild_id: String(guildId),
+        partner_channel_id: String(channelId),
+        discord_webhook_url: String(webhookUrl),
+      })
+      .select("id, code, percent_off, duration_months, total_spent_cents")
+      .single();
+    if (error) {
+      if (error.code === "23505") throw userError("That partnership code already exists.");
+      throw fail(`Partnership deal creation failed: ${error.message}`, error);
+    }
+    return data;
+  }
+
   async function healthCheck() {
     const { error: authError } = await supabase.auth.admin.listUsers({
       page: 1,
@@ -288,5 +331,13 @@ export function createYetiService(config, options = {}) {
     });
   }
 
-  return { createPromoLink, findUserByEmail, grantCredits, grantPremium, healthCheck, logError };
+  return {
+    createPromoLink,
+    createPartnershipDeal,
+    findUserByEmail,
+    grantCredits,
+    grantPremium,
+    healthCheck,
+    logError,
+  };
 }
