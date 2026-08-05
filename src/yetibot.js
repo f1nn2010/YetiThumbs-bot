@@ -317,7 +317,7 @@ async function selectCreditPackage(interaction) {
       `3. ${purchaseLine}`,
       "4. Upload a screenshot showing the completed purchase.",
       "",
-      `${staffMention()} will verify it, then use `/grant-credits` for **${item.credits} credits**.`,
+      `${staffMention()} will verify it, then use '/grant-credits' for **${item.credits} credits**.`,
     ].join("\n"),
   });
 }
@@ -373,7 +373,7 @@ async function selectPremiumDuration(interaction) {
       `3. ${purchaseLine}`,
       "4. Upload a screenshot showing the completed purchase.",
       "",
-      `${staffMention()} will verify it, then use `/grant-premium` with plan **${purchase.label}** and **${purchase.months} month(s)**.`,
+      `${staffMention()} will verify it, then use '/grant-premium' with plan **${purchase.label}** and **${purchase.months} month(s)**.`,
     ].join("\n"),
   });
 }
