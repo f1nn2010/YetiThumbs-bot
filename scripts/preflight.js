@@ -49,6 +49,7 @@ if (config.guildId) {
     ["Embed Links", 1n << 14n],
     ["Attach Files", 1n << 15n],
     ["Read Message History", 1n << 16n],
+    ["Manage Webhooks", 1n << 29n],
   ];
   const missingPermissions = required
     .filter(([, bit]) => !(permissions & administrator) && !(permissions & bit))
