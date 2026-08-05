@@ -43,6 +43,7 @@ const config = loadConfig();
 const yeti = createYetiService(config);
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 const ticketLocks = new Map();
+const inMemoryTicketCounters = new Map();
 let ready = false;
 let startupValidated = false;
 let shuttingDown = false;
@@ -74,6 +75,21 @@ async function withTicketLock(guildId, operation) {
     release();
     if (ticketLocks.get(guildId) === current) ticketLocks.delete(guildId);
   }
+}
+
+// Allocate ticket numbers monotonically for the lifetime of this bot process.
+// Existing channel names seed the counter so an upgrade never starts at 1.
+// The per-guild lock above makes allocation safe when users open tickets at
+// the same time; keeping the counter separate from channels prevents reuse
+// after a ticket is deleted during the same deployment.
+function allocateTicketNumber(guildId, channels) {
+  const highestExisting = nextTicketNumber(channels) - 1;
+  const next = Math.max(
+    highestExisting + 1,
+    (inMemoryTicketCounters.get(guildId) ?? 0) + 1,
+  );
+  inMemoryTicketCounters.set(guildId, next);
+  return next;
 }
 
 async function registerCommands() {
@@ -217,8 +233,12 @@ async function createTicket(interaction) {
     ];
 
     const parent = channels.get(config.ticketCategoryId);
+    const ticketNumber = allocateTicketNumber(
+      interaction.guild.id,
+      channels.values(),
+    );
     const channel = await interaction.guild.channels.create({
-      name: `ticket-${nextTicketNumber(channels.values())}`,
+      name: `ticket-${ticketNumber}`,
       type: ChannelType.GuildText,
       parent: parent?.type === ChannelType.GuildCategory ? parent.id : undefined,
       topic: ticketTopic(interaction.user.id, kind),
