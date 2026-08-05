@@ -49,6 +49,17 @@ export function normalizeSupabaseUrl(value) {
   }
 }
 
+export function normalizePublicAppUrl(value) {
+  const raw = cleanEnv(value) || "https://yetithumbs.com";
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return "https://yetithumbs.com";
+    return url.origin;
+  } catch {
+    return "https://yetithumbs.com";
+  }
+}
+
 export function normalizeRobloxUrl(value) {
   const raw = cleanEnv(value);
   if (!raw) return "";
@@ -112,7 +123,7 @@ export function loadConfig(env = process.env) {
     ),
     host: cleanEnv(env.WEB_HOST) || "0.0.0.0",
     port: integer(env.PORT, 3000, { min: 1, max: 65535 }),
-    publicAppUrl: cleanEnv(env.PUBLIC_APP_URL) || "https://yetithumbs.com",
+    publicAppUrl: normalizePublicAppUrl(env.PUBLIC_APP_URL),
     creditPackages: {
       pkg_10c: {
         label: "10 Credits",

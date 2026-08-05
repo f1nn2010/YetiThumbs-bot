@@ -424,14 +424,37 @@ async function createPromoLink(interaction) {
     maxUses: interaction.options.getInteger("max_uses"),
     createdBy: interaction.user.id,
   });
-  const details = result.kind === "discount"
-    ? `${result.percent_off}% off for ${result.duration_months} month(s)`
-    : `${result.credits} credits`;
-  const limit = result.max_uses ? ` Maximum uses: ${result.max_uses}.` : " Unlimited uses.";
-  return respondEphemeral(
-    interaction,
-    `Created **${details}** promo link.${limit}\n${result.url}`,
-  );
+    const details = result.kind === "discount"
+      ? `${result.percent_off}% off for ${result.duration_months} month(s)`
+      : `${result.credits} credits`;
+    const limit = result.max_uses ? ` Maximum uses: ${result.max_uses}.` : " Unlimited uses.";
+    const embed = new EmbedBuilder()
+      .setColor(result.kind === "discount" ? 0x39dcff : 0x64f2b6)
+      .setTitle(result.kind === "discount" ? "YetiThumbs discount link" : "YetiThumbs credit link")
+      .setURL(result.url)
+      .setDescription(
+        result.kind === "discount"
+          ? `Save **${result.percent_off}%** on a YetiThumbs subscription for **${result.duration_months} month(s)**.`
+          : `Redeem **${result.credits} credits** on a YetiThumbs account.`,
+      )
+      .addFields(
+        { name: "How it works", value: "Open the link, create or sign in to your account, and the benefit is applied automatically.", inline: false },
+        { name: "Availability", value: result.max_uses ? `${result.max_uses} total redemption(s)` : "No redemption limit", inline: true },
+      )
+      .setFooter({ text: "YetiThumbs • secure one-time redemption" });
+    return respondEphemeral(
+      interaction,
+      {
+        content: `Created **${details}** promo link.${limit}`,
+        embeds: [embed],
+        components: [
+          {
+            type: 1,
+            components: [{ type: 2, style: 5, label: "Open YetiThumbs", url: result.url }],
+          },
+        ],
+      },
+    );
 }
 
 async function closeTicket(interaction) {
