@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { randomBytes } from "node:crypto";
 import { isMissingRpc, normalizeEmail } from "./domain.js";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
@@ -115,6 +116,46 @@ export function createYetiService(config, options = {}) {
     };
   }
 
+  async function createPromoLink({ kind, percent, months, credits, maxUses, createdBy }) {
+    if (!['discount', 'credits'].includes(kind)) {
+      throw userError("Choose either a discount or credits link.");
+    }
+    if (kind === "discount") {
+      if (!Number.isInteger(percent) || percent < 1 || percent > 100) {
+        throw userError("Discount percentage must be a whole number between 1 and 100.");
+      }
+      if (!Number.isInteger(months) || months < 1 || months > 36) {
+        throw userError("Discount duration must be a whole number between 1 and 36 months.");
+      }
+      credits = null;
+    } else {
+      if (!Number.isInteger(credits) || credits < 1 || credits > 100000) {
+        throw userError("Credits must be a whole number between 1 and 100000.");
+      }
+      percent = null;
+      months = null;
+    }
+    if (maxUses != null && (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 1000000)) {
+      throw userError("Maximum uses must be a whole number between 1 and 1000000.");
+    }
+    const code = `YETI-${randomBytes(7).toString("hex").toUpperCase()}`;
+    const { data, error } = await supabase
+      .from("yetithumbs_promo_links")
+      .insert({
+        code,
+        kind,
+        percent_off: percent,
+        duration_months: months,
+        credits,
+        max_uses: maxUses ?? null,
+        created_by_discord_id: String(createdBy),
+      })
+      .select("code, kind, percent_off, duration_months, credits, max_uses, expires_at")
+      .single();
+    if (error) throw fail(`Promo link creation failed: ${error.message}`, error);
+    return { ...data, url: `${config.publicAppUrl}/signup?promo=${encodeURIComponent(data.code)}` };
+  }
+
   async function healthCheck() {
     const { error: authError } = await supabase.auth.admin.listUsers({
       page: 1,
@@ -184,5 +225,5 @@ export function createYetiService(config, options = {}) {
     });
   }
 
-  return { findUserByEmail, grantCredits, grantPremium, healthCheck, logError };
+  return { createPromoLink, findUserByEmail, grantCredits, grantPremium, healthCheck, logError };
 }

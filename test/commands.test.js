@@ -2,10 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { commands } from "../src/commands.js";
 
-test("the bot publishes only the three intended guild commands", () => {
+test("the bot publishes the intended guild commands", () => {
   assert.deepEqual(
     commands.map((command) => command.name).sort(),
-    ["grant-credits", "grant-premium", "setup-tickets"],
+    ["create-link", "grant-credits", "grant-premium", "setup-tickets"],
+  );
+});
+
+test("create-link exposes discount and credit controls", () => {
+  const command = commands.find((item) => item.name === "create-link");
+  assert.deepEqual(
+    command.options.map((option) => option.name),
+    ["type", "percent", "months", "credits", "max_uses"],
+  );
+  assert.deepEqual(
+    command.options[0].choices.map((choice) => choice.value),
+    ["discount", "credits"],
   );
 });
 

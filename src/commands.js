@@ -56,4 +56,45 @@ export const commands = [
         .setMinValue(1)
         .setMaxValue(36),
     ),
+  new SlashCommandBuilder()
+    .setName("create-link")
+    .setDescription("Staff: create a discount or credit promo link")
+    .addStringOption((option) =>
+      option
+        .setName("type")
+        .setDescription("What the link grants")
+        .setRequired(true)
+        .addChoices(
+          { name: "Percentage discount", value: "discount" },
+          { name: "Credits", value: "credits" },
+        ),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("percent")
+        .setDescription("Discount percentage (discount links only, 1-100)")
+        .setMinValue(1)
+        .setMaxValue(100),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("months")
+        .setDescription("How many subscription months are discounted (1-36)")
+        .setMinValue(1)
+        .setMaxValue(36),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("credits")
+        .setDescription("Credits granted by a credit link (1-100000)")
+        .setMinValue(1)
+        .setMaxValue(100000),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("max_uses")
+        .setDescription("Maximum redemptions; leave empty for unlimited")
+        .setMinValue(1)
+        .setMaxValue(1000000),
+    ),
 ].map((command) => command.toJSON());

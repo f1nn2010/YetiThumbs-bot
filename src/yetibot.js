@@ -410,6 +410,30 @@ async function grantPremium(interaction) {
   );
 }
 
+async function createPromoLink(interaction) {
+  if (!isStaff(interaction.member)) {
+    return respondEphemeral(interaction, "Only configured staff can create promo links.");
+  }
+  await deferEphemeral(interaction);
+  const kind = interaction.options.getString("type", true);
+  const result = await yeti.createPromoLink({
+    kind,
+    percent: interaction.options.getInteger("percent"),
+    months: interaction.options.getInteger("months"),
+    credits: interaction.options.getInteger("credits"),
+    maxUses: interaction.options.getInteger("max_uses"),
+    createdBy: interaction.user.id,
+  });
+  const details = result.kind === "discount"
+    ? `${result.percent_off}% off for ${result.duration_months} month(s)`
+    : `${result.credits} credits`;
+  const limit = result.max_uses ? ` Maximum uses: ${result.max_uses}.` : " Unlimited uses.";
+  return respondEphemeral(
+    interaction,
+    `Created **${details}** promo link.${limit}\n${result.url}`,
+  );
+}
+
 async function closeTicket(interaction) {
   if (!isStaff(interaction.member)) {
     return respondEphemeral(interaction, "Only configured staff can close tickets.");
@@ -505,6 +529,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "setup-tickets") return await setupTickets(interaction);
       if (interaction.commandName === "grant-credits") return await grantCredits(interaction);
       if (interaction.commandName === "grant-premium") return await grantPremium(interaction);
+      if (interaction.commandName === "create-link") return await createPromoLink(interaction);
       return;
     }
     if (interaction.isStringSelectMenu()) {

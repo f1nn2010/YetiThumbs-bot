@@ -75,7 +75,7 @@ if (config.guildId) {
     discord(`/applications/${config.clientId}/guilds/${config.guildId}/commands`),
     discord(`/applications/${config.clientId}/commands`),
   ]);
-  const expected = ["grant-credits", "grant-premium", "setup-tickets"].sort();
+  const expected = ["create-link", "grant-credits", "grant-premium", "setup-tickets"].sort();
   const current = guildCommands.map((command) => command.name).sort();
   if (JSON.stringify(current) !== JSON.stringify(expected) || globalCommands.length) {
     console.warn(
