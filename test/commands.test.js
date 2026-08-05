@@ -9,15 +9,15 @@ test("the bot publishes the intended guild commands", () => {
   );
 });
 
-test("create-link exposes discount and credit controls", () => {
+test("create-link exposes credit controls only", () => {
   const command = commands.find((item) => item.name === "create-link");
   assert.deepEqual(
     command.options.map((option) => option.name),
-    ["type", "percent", "months", "credits", "max_uses"],
+    ["type", "credits", "max_uses"],
   );
   assert.deepEqual(
     command.options[0].choices.map((choice) => choice.value),
-    ["discount", "credits"],
+    ["credits"],
   );
 });
 

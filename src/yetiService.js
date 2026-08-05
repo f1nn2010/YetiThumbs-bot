@@ -190,24 +190,14 @@ export function createYetiService(config, options = {}) {
   }
 
   async function createPromoLink({ kind, percent, months, credits, maxUses, createdBy }) {
-    if (!['discount', 'credits'].includes(kind)) {
-      throw userError("Choose either a discount or credits link.");
+    if (kind !== "credits") {
+      throw userError("Only credit links are available.");
     }
-    if (kind === "discount") {
-      if (!Number.isInteger(percent) || percent < 1 || percent > 100) {
-        throw userError("Discount percentage must be a whole number between 1 and 100.");
-      }
-      if (!Number.isInteger(months) || months < 1 || months > 36) {
-        throw userError("Discount duration must be a whole number between 1 and 36 months.");
-      }
-      credits = null;
-    } else {
-      if (!Number.isInteger(credits) || credits < 1 || credits > 100000) {
-        throw userError("Credits must be a whole number between 1 and 100000.");
-      }
-      percent = null;
-      months = null;
+    if (!Number.isInteger(credits) || credits < 1 || credits > 100000) {
+      throw userError("Credits must be a whole number between 1 and 100000.");
     }
+    percent = null;
+    months = null;
     if (maxUses != null && (!Number.isInteger(maxUses) || maxUses < 1 || maxUses > 1000000)) {
       throw userError("Maximum uses must be a whole number between 1 and 1000000.");
     }
