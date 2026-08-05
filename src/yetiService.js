@@ -93,10 +93,48 @@ export function createYetiService(config, options = {}) {
       },
     );
 
-    if (rpcError) throw fail(`Premium grant failed: ${rpcError.message}`, rpcError);
+    if (rpcError) {
+      // Older production projects may have the profile columns but not the
+      // latest RPC yet. Repair the entitlement directly with the service role
+      // rather than reporting a misleading success or leaving the account on
+      // Free.
+      if (isMissingRpc(rpcError) && typeof supabase.from === "function") {
+        const { data: current, error: currentError } = await supabase
+          .from("yetithumbs_profiles")
+          .select("plan_source, manual_plan_expires_at, credits")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (currentError) throw fail(`Premium grant failed: ${currentError.message}`, currentError);
+        const base = current?.manual_plan_expires_at && new Date(current.manual_plan_expires_at) > new Date()
+          ? new Date(current.manual_plan_expires_at)
+          : new Date();
+        base.setUTCMonth(base.getUTCMonth() + months);
+        const { data: repaired, error: repairError } = await supabase
+          .from("yetithumbs_profiles")
+          .update({
+            plan: current?.plan_source === "stripe" ? undefined : planId,
+            plan_source: current?.plan_source === "stripe" ? "stripe" : "robux",
+            manual_plan: planId,
+            manual_plan_source: "robux",
+            manual_plan_expires_at: base.toISOString(),
+            credits: Math.max(Number(current?.credits ?? 0), plan.credits),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id)
+          .select("credits, manual_plan_expires_at")
+          .single();
+        if (repairError) throw fail(`Premium grant failed: ${repairError.message}`, repairError);
+        return {
+          user, planId, planLabel: plan.label, monthlyCredits: plan.credits,
+          credits: Number(repaired.credits), expiresAt: new Date(repaired.manual_plan_expires_at),
+          expiryPersisted: true,
+        };
+      }
+      throw fail(`Premium grant failed: ${rpcError.message}`, rpcError);
+    }
 
     const row = Array.isArray(rpcData) ? rpcData[0] : rpcData;
-    const credits = Number(row?.credits);
+    let credits = Number(row?.credits);
     const expiresAt = new Date(row?.expires_at);
     if (
       !Number.isSafeInteger(credits) ||
@@ -104,6 +142,41 @@ export function createYetiService(config, options = {}) {
       Number.isNaN(expiresAt.getTime())
     ) {
       throw fail("Premium grant returned an invalid entitlement.");
+    }
+
+    // Read back the canonical profile row. This catches stale/older RPC
+    // definitions that returned a balance without actually persisting the
+    // manual entitlement fields.
+    if (typeof supabase.from === "function") {
+      const { data: profile, error: profileError } = await supabase
+        .from("yetithumbs_profiles")
+        .select("plan, plan_source, manual_plan, manual_plan_source, manual_plan_expires_at, credits")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (profileError) throw fail(`Premium entitlement verification failed: ${profileError.message}`, profileError);
+      const entitlementMatches =
+        profile?.manual_plan === planId &&
+        profile?.manual_plan_source === "robux" &&
+        profile?.manual_plan_expires_at &&
+        new Date(profile.manual_plan_expires_at) > new Date();
+      if (!entitlementMatches) {
+        const { data: repaired, error: repairError } = await supabase
+          .from("yetithumbs_profiles")
+          .update({
+            plan: profile?.plan_source === "stripe" ? profile.plan : planId,
+            plan_source: profile?.plan_source === "stripe" ? "stripe" : "robux",
+            manual_plan: planId,
+            manual_plan_source: "robux",
+            manual_plan_expires_at: expiresAt.toISOString(),
+            credits: Math.max(Number(profile?.credits ?? 0), credits),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id)
+          .select("credits, manual_plan_expires_at")
+          .single();
+        if (repairError) throw fail(`Premium entitlement repair failed: ${repairError.message}`, repairError);
+        credits = Number(repaired.credits);
+      }
     }
     return {
       user,
