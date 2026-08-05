@@ -49,13 +49,18 @@ if (config.guildId) {
     ["Embed Links", 1n << 14n],
     ["Attach Files", 1n << 15n],
     ["Read Message History", 1n << 16n],
-    ["Manage Webhooks", 1n << 29n],
   ];
   const missingPermissions = required
     .filter(([, bit]) => !(permissions & administrator) && !(permissions & bit))
     .map(([name]) => name);
   if (missingPermissions.length) {
     throw new Error(`Bot is missing guild permissions: ${missingPermissions.join(", ")}`);
+  }
+  const manageWebhooks = 1n << 29n;
+  if (!(permissions & administrator) && !(permissions & manageWebhooks)) {
+    console.warn(
+      "Warning: Bot is missing Manage Webhooks; partnership promotion channels will be unavailable until it is granted.",
+    );
   }
   console.log(`Guild OK: ${guild.name}; bot member roles: ${member.roles.length}`);
 
