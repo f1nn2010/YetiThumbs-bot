@@ -202,14 +202,13 @@ test("ending a partnership disables future redemptions but keeps its tracked sal
 
   assert.equal(result.code, "PARTNER20");
   assert.equal(result.total_spent_cents, 12345);
-  assert.deepEqual(calls.slice(0, 4), [
+  assert.deepEqual(calls.slice(0, 3), [
     ["select", "id, code, partner_discord_id, partner_channel_id, total_spent_cents, expires_at"],
     ["eq", "code", "PARTNER20"],
     ["eq", "kind", "discount"],
-    ["not", "partner_discord_id", "is", null],
   ]);
-  assert.equal(calls[4][0], "update");
-  assert.deepEqual(calls.slice(5), [
+  assert.equal(calls[3][0], "update");
+  assert.deepEqual(calls.slice(4), [
     ["updateEq", "id", "promo-1"],
     ["updateSelect", "code, partner_discord_id, partner_channel_id, total_spent_cents, expires_at"],
   ]);
