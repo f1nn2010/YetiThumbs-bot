@@ -144,6 +144,77 @@ test("account lookup rejects a malformed email before calling Supabase Auth", as
   assert.equal(authCalls, 0);
 });
 
+test("ending a partnership disables future redemptions but keeps its tracked sales total", async () => {
+  const calls = [];
+  const existing = {
+    id: "promo-1",
+    code: "PARTNER20",
+    partner_discord_id: "partner-1",
+    partner_channel_id: "channel-1",
+    total_spent_cents: 12345,
+    expires_at: null,
+  };
+  const ended = { ...existing, expires_at: "2026-08-07T12:00:00.000Z" };
+  const supabase = {
+    from(table) {
+      assert.equal(table, "yetithumbs_promo_links");
+      return {
+        select(columns) {
+          calls.push(["select", columns]);
+          return {
+            eq(column, value) {
+              calls.push(["eq", column, value]);
+              return this;
+            },
+            not(column, operator, value) {
+              calls.push(["not", column, operator, value]);
+              return this;
+            },
+            async maybeSingle() {
+              return { data: existing, error: null };
+            },
+          };
+        },
+        update(values) {
+          calls.push(["update", values]);
+          return {
+            eq(column, value) {
+              calls.push(["updateEq", column, value]);
+              return {
+                select(columns) {
+                  calls.push(["updateSelect", columns]);
+                  return {
+                    async single() {
+                      return { data: ended, error: null };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  const service = createYetiService(config, { supabase });
+
+  const result = await service.endPartnershipDeal(" partner20 ");
+
+  assert.equal(result.code, "PARTNER20");
+  assert.equal(result.total_spent_cents, 12345);
+  assert.deepEqual(calls.slice(0, 4), [
+    ["select", "id, code, partner_discord_id, partner_channel_id, total_spent_cents, expires_at"],
+    ["eq", "code", "PARTNER20"],
+    ["eq", "kind", "discount"],
+    ["not", "partner_discord_id", "is", null],
+  ]);
+  assert.equal(calls[4][0], "update");
+  assert.deepEqual(calls.slice(5), [
+    ["updateEq", "id", "promo-1"],
+    ["updateSelect", "code, partner_discord_id, partner_channel_id, total_spent_cents, expires_at"],
+  ]);
+});
+
 function serviceForHealth(probeResponses, onProfileSelect) {
   const responses = [...probeResponses];
   const supabase = {
