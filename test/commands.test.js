@@ -34,7 +34,7 @@ test("create-link exposes credit controls only", () => {
   );
 });
 
-test("create-partnership requires a code, discount, partner, and duration", () => {
+test("create-partnership requires a code and discount, with an optional partner", () => {
   const command = commands.find((item) => item.name === "create-partnership");
   assert.deepEqual(
     command.options.map((option) => option.name),
@@ -42,7 +42,7 @@ test("create-partnership requires a code, discount, partner, and duration", () =
   );
   assert.equal(command.options.find((option) => option.name === "code").required, true);
   assert.equal(command.options.find((option) => option.name === "percent").required, true);
-  assert.equal(command.options.find((option) => option.name === "partner").required, true);
+  assert.equal(command.options.find((option) => option.name === "partner").required, false);
 });
 
 test("configured staff roles are not blocked by Administrator-only command defaults", () => {
