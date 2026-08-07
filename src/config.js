@@ -113,6 +113,7 @@ export function loadConfig(env = process.env) {
       DEFAULT_STAFF_ROLE_IDS.join(","),
     ),
     ticketCategoryId: cleanEnv(env.DISCORD_TICKET_CATEGORY_ID),
+    partnershipCategoryId: cleanEnv(env.DISCORD_PARTNERSHIP_CATEGORY_ID),
     supabaseUrl: normalizeSupabaseUrl(
       env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL,
     ),
@@ -218,6 +219,9 @@ export function loadConfig(env = process.env) {
   if (!isDiscordId(config.guildId)) missing.push("GUILD_ID (Discord ID)");
   if (config.ticketCategoryId && !isDiscordId(config.ticketCategoryId)) {
     missing.push("DISCORD_TICKET_CATEGORY_ID (Discord ID)");
+  }
+  if (config.partnershipCategoryId && !isDiscordId(config.partnershipCategoryId)) {
+    missing.push("DISCORD_PARTNERSHIP_CATEGORY_ID (Discord ID)");
   }
   if (!config.supabaseUrl) missing.push("SUPABASE_URL");
   if (!config.supabaseKey) missing.push("SUPABASE_SERVICE_ROLE_KEY");
