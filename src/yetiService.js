@@ -230,8 +230,8 @@ export function createYetiService(config, options = {}) {
     createdBy,
   }) {
     const normalizedCode = String(code ?? "").trim().toUpperCase();
-    if (!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(normalizedCode)) {
-      throw userError("Code must be 3-32 characters and use only letters, numbers, hyphens, or underscores.");
+    if (!/^[A-Z0-9][A-Z0-9-]{2,31}$/.test(normalizedCode)) {
+      throw userError("Code must be 3-32 characters and use only letters, numbers, or hyphens so Stripe can accept it.");
     }
     if (!Number.isInteger(percentOff) || percentOff < 1 || percentOff > 100) {
       throw userError("Discount must be a whole percentage between 1 and 100.");
@@ -264,8 +264,8 @@ export function createYetiService(config, options = {}) {
 
   async function endPartnershipDeal(code) {
     const normalizedCode = String(code ?? "").trim().toUpperCase();
-    if (!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(normalizedCode)) {
-      throw userError("Code must be 3-32 characters and use only letters, numbers, hyphens, or underscores.");
+    if (!/^[A-Z0-9][A-Z0-9-]{2,31}$/.test(normalizedCode)) {
+      throw userError("Code must be 3-32 characters and use only letters, numbers, or hyphens.");
     }
 
     const { data: existing, error: lookupError } = await supabase
