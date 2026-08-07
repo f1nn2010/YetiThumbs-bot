@@ -45,6 +45,7 @@ schema.
 | `DISCORD_STAFF_ROLE_IDS` | Recommended | Comma-separated staff role IDs. |
 | `OWNER_IDS` | Optional | Comma-separated user IDs that should count as staff. |
 | `DISCORD_TICKET_CATEGORY_ID` | Recommended | Category for new private tickets. |
+| `DISCORD_PARTNERSHIP_CATEGORY_ID` | Optional | Existing category for partnership channels; otherwise the bot creates a private YetiThumbs Partnerships category. |
 | `SUPABASE_URL` | Yes | YetiThumbs Supabase project URL. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only Supabase service credential. Keep secret. |
 | `ROBUX_PRICE_*_MONTHLY` | Recommended | Monthly Robux price for each premium level. |
