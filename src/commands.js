@@ -82,11 +82,11 @@ export const commands = [
     ),
   new SlashCommandBuilder()
     .setName("create-partnership")
-    .setDescription("Staff: create a partner discount deal and private sales channel")
+    .setDescription("Staff: create a discount deal and private sales channel")
     .addStringOption((option) =>
       option
         .setName("code")
-        .setDescription("Discount code customers enter at signup")
+        .setDescription("Code customers enter at Stripe checkout (letters, numbers, -)")
         .setRequired(true)
         .setMinLength(3)
         .setMaxLength(32),
@@ -102,8 +102,8 @@ export const commands = [
     .addUserOption((option) =>
       option
         .setName("partner")
-        .setDescription("Partner who can see the private sales channel")
-        .setRequired(true),
+        .setDescription("Optional partner who can see the private sales channel")
+        .setRequired(false),
     )
     .addIntegerOption((option) =>
       option
