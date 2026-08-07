@@ -499,6 +499,21 @@ async function createPartnership(interaction) {
   const durationMonths = interaction.options.getInteger("months") ?? 1;
   const safeCode = code.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 70);
   const channelName = `partnership-${safeCode}`;
+  let partnershipCategory = config.partnershipCategoryId
+    ? interaction.guild.channels.cache.get(config.partnershipCategoryId)
+    : interaction.guild.channels.cache.find(
+        (channel) =>
+          channel.type === ChannelType.GuildCategory &&
+          channel.name.toLowerCase() === "yetithumbs partnerships",
+      );
+
+  if (partnershipCategory && partnershipCategory.type !== ChannelType.GuildCategory) {
+    return respondEphemeral(
+      interaction,
+      "The configured partnership category is not a Discord category. Set DISCORD_PARTNERSHIP_CATEGORY_ID to a category ID and try again.",
+    );
+  }
+
   const permissionOverwrites = [
     {
       id: interaction.guild.id,
@@ -536,9 +551,38 @@ async function createPartnership(interaction) {
 
   let channel;
   try {
+    if (!partnershipCategory) {
+      partnershipCategory = await interaction.guild.channels.create({
+        name: "YetiThumbs Partnerships",
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [
+          {
+            id: interaction.guild.id,
+            deny: [PermissionFlagsBits.ViewChannel],
+          },
+          {
+            id: client.user.id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.ManageChannels,
+            ],
+          },
+          ...config.staffRoleIds.map((id) => ({
+            id,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.ManageChannels,
+            ],
+          })),
+        ],
+        reason: "YetiThumbs partnership category setup",
+      });
+    }
+
     channel = await interaction.guild.channels.create({
       name: channelName,
       type: ChannelType.GuildText,
+      parent: partnershipCategory.id,
       topic: `YetiThumbs partnership ${code} for ${partner.id}`,
       permissionOverwrites,
       reason: `Partnership deal ${code} created by ${interaction.user.tag}`,
