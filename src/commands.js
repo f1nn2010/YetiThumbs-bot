@@ -112,4 +112,15 @@ export const commands = [
         .setMinValue(1)
         .setMaxValue(36),
     ),
+  new SlashCommandBuilder()
+    .setName("end-partnership")
+    .setDescription("Staff: end a partnership and disable its discount code")
+    .addStringOption((option) =>
+      option
+        .setName("code")
+        .setDescription("Active partnership discount code to end")
+        .setRequired(true)
+        .setMinLength(3)
+        .setMaxLength(32),
+    ),
 ].map((command) => command.toJSON());
