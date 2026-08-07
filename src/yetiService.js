@@ -262,6 +262,36 @@ export function createYetiService(config, options = {}) {
     return data;
   }
 
+  async function endPartnershipDeal(code) {
+    const normalizedCode = String(code ?? "").trim().toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9_-]{2,31}$/.test(normalizedCode)) {
+      throw userError("Code must be 3-32 characters and use only letters, numbers, hyphens, or underscores.");
+    }
+
+    const { data: existing, error: lookupError } = await supabase
+      .from("yetithumbs_promo_links")
+      .select("id, code, partner_discord_id, partner_channel_id, total_spent_cents, expires_at")
+      .eq("code", normalizedCode)
+      .eq("kind", "discount")
+      .not("partner_discord_id", "is", null)
+      .maybeSingle();
+
+    if (lookupError) throw fail(`Partnership lookup failed: ${lookupError.message}`, lookupError);
+    if (!existing) throw userError("No partnership was found for that code.");
+    if (existing.expires_at && new Date(existing.expires_at).getTime() <= Date.now()) {
+      throw userError("That partnership has already ended.");
+    }
+
+    const { data, error } = await supabase
+      .from("yetithumbs_promo_links")
+      .update({ expires_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .select("code, partner_discord_id, partner_channel_id, total_spent_cents, expires_at")
+      .single();
+    if (error) throw fail(`Partnership end failed: ${error.message}`, error);
+    return data;
+  }
+
   async function healthCheck() {
     const { error: authError } = await supabase.auth.admin.listUsers({
       page: 1,
@@ -355,6 +385,7 @@ export function createYetiService(config, options = {}) {
   return {
     createPromoLink,
     createPartnershipDeal,
+    endPartnershipDeal,
     findUserByEmail,
     grantCredits,
     grantPremium,
