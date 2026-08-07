@@ -1,18 +1,12 @@
 import { loadConfig } from "../src/config.js";
+import { discordApiRequest } from "../src/discordApi.js";
 import { robuxLinkCoverage } from "../src/purchaseFlow.js";
 import { createYetiService } from "../src/yetiService.js";
 
 const config = loadConfig();
 
 async function discord(path) {
-  const response = await fetch(`https://discord.com/api/v10${path}`, {
-    headers: { authorization: `Bot ${config.token}` },
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(`Discord ${path} failed (${response.status}): ${data.message ?? "unknown error"}`);
-  }
-  return data;
+  return discordApiRequest({ token: config.token, path });
 }
 
 console.log("Checking Discord credentials...");
