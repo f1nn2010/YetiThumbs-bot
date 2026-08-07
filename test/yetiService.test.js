@@ -144,8 +144,8 @@ test("account lookup rejects a malformed email before calling Supabase Auth", as
   assert.equal(authCalls, 0);
 });
 
-function serviceForHealth(probeErrors) {
-  const errors = [...probeErrors];
+function serviceForHealth(probeResponses, onProfileSelect) {
+  const responses = [...probeResponses];
   const supabase = {
     auth: {
       admin: {
@@ -156,7 +156,8 @@ function serviceForHealth(probeErrors) {
     },
     from() {
       return {
-        select() {
+        select(columns) {
+          onProfileSelect?.(columns);
           return {
             async limit() {
               return { data: [], error: null };
@@ -166,7 +167,7 @@ function serviceForHealth(probeErrors) {
       };
     },
     async rpc() {
-      return { data: null, error: errors.shift() };
+      return responses.shift();
     },
   };
   return createYetiService(config, { supabase });
@@ -174,8 +175,9 @@ function serviceForHealth(probeErrors) {
 
 test("health check proves both grant functions reject non-mutating probes", async () => {
   const service = serviceForHealth([
-    { code: "P0001", message: "Credit amount must be between 1 and 100000" },
-    { code: "P0001", message: "Unsupported plan" },
+    { data: null, error: { code: "P0001", message: "Credit amount must be between 1 and 100000" } },
+    { data: null, error: { code: "P0001", message: "Unsupported plan" } },
+    { data: false, error: null },
   ]);
 
   assert.deepEqual(await service.healthCheck(), {
@@ -186,11 +188,42 @@ test("health check proves both grant functions reject non-mutating probes", asyn
 
 test("health check is not ready when a grant function is missing", async () => {
   const service = serviceForHealth([
-    { code: "PGRST202", message: "Function not found" },
+    { data: null, error: { code: "PGRST202", message: "Function not found" } },
   ]);
   const health = await service.healthCheck();
 
   assert.equal(health.ok, false);
   assert.equal(health.entitlementSchemaReady, false);
   assert.match(health.schemaError, /grant_yetithumbs_credits/);
+});
+
+test("health check requires the full manual-entitlement schema and 12-credit reservation support", async () => {
+  let profileColumns = "";
+  const service = serviceForHealth(
+    [
+      { data: null, error: { code: "P0001", message: "Credit amount must be between 1 and 100000" } },
+      { data: null, error: { code: "P0001", message: "Unsupported plan" } },
+      { data: false, error: null },
+    ],
+    (columns) => {
+      profileColumns = columns;
+    },
+  );
+
+  assert.equal((await service.healthCheck()).ok, true);
+  assert.match(profileColumns, /manual_plan/);
+  assert.match(profileColumns, /manual_plan_source/);
+  assert.match(profileColumns, /credits_reset_at/);
+});
+
+test("health check rejects the obsolete four-credit reservation function", async () => {
+  const service = serviceForHealth([
+    { data: null, error: { code: "P0001", message: "Credit amount must be between 1 and 100000" } },
+    { data: null, error: { code: "P0001", message: "Unsupported plan" } },
+    { data: null, error: { code: "P0001", message: "Thumbnail count must be between 1 and 4" } },
+  ]);
+
+  const health = await service.healthCheck();
+  assert.equal(health.ok, false);
+  assert.match(health.schemaError, /consume_yetithumbs_credits/);
 });
