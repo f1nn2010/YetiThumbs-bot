@@ -73,6 +73,21 @@ test("production config rejects unsafe Roblox links", () => {
   );
 });
 
+test("partnership category is optional but must be a Discord category ID when set", () => {
+  assert.equal(loadConfig(validEnvironment).partnershipCategoryId, "");
+  assert.equal(
+    loadConfig({
+      ...validEnvironment,
+      DISCORD_PARTNERSHIP_CATEGORY_ID: "1532481208490131649",
+    }).partnershipCategoryId,
+    "1532481208490131649",
+  );
+  assert.throws(
+    () => loadConfig({ ...validEnvironment, DISCORD_PARTNERSHIP_CATEGORY_ID: "bad" }),
+    /DISCORD_PARTNERSHIP_CATEGORY_ID \(Discord ID\)/,
+  );
+});
+
 test("production config models all premium levels without inventing prices", () => {
   const config = loadConfig({
     ...validEnvironment,
