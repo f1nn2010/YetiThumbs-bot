@@ -495,7 +495,7 @@ async function createPartnership(interaction) {
 
   const code = interaction.options.getString("code", true).trim().toUpperCase();
   const percentOff = interaction.options.getInteger("percent", true);
-  const partner = interaction.options.getUser("partner", true);
+  const partner = interaction.options.getUser("partner");
   const durationMonths = interaction.options.getInteger("months") ?? 1;
   const safeCode = code.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 70);
   const channelName = `partnership-${safeCode}`;
@@ -519,14 +519,16 @@ async function createPartnership(interaction) {
       id: interaction.guild.id,
       deny: [PermissionFlagsBits.ViewChannel],
     },
-    {
-      id: partner.id,
-      allow: [
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.ReadMessageHistory,
-      ],
-    },
+    ...(partner
+      ? [{
+          id: partner.id,
+          allow: [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory,
+          ],
+        }]
+      : []),
     {
       id: client.user.id,
       allow: [
@@ -583,7 +585,7 @@ async function createPartnership(interaction) {
       name: channelName,
       type: ChannelType.GuildText,
       parent: partnershipCategory.id,
-      topic: `YetiThumbs partnership ${code} for ${partner.id}`,
+      topic: `YetiThumbs partnership ${code}${partner ? ` for ${partner.id}` : ""}`,
       permissionOverwrites,
       reason: `Partnership deal ${code} created by ${interaction.user.tag}`,
     });
@@ -600,7 +602,7 @@ async function createPartnership(interaction) {
     });
 
     await channel.send({
-      content: `${partner} ${staffMention()}`,
+      content: `${partner ? `${partner} ` : ""}${staffMention()}`,
       embeds: [
         new EmbedBuilder()
           .setColor(0x64f2b6)
@@ -612,7 +614,11 @@ async function createPartnership(interaction) {
             { name: "Duration", value: `${deal.duration_months} month(s)`, inline: true },
             { name: "Sales total", value: "$0.00 USD", inline: true },
           )
-          .setFooter({ text: "Only configured staff and the partner can view this channel." }),
+          .setFooter({
+            text: partner
+              ? "Only configured staff and the partner can view this channel."
+              : "Only configured staff can view this channel until a partner is assigned.",
+          }),
       ],
     });
 
