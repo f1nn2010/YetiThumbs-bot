@@ -61,6 +61,13 @@ function staffMention() {
     : "Staff";
 }
 
+function formatUsdCents(cents) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Math.max(0, Number(cents) || 0) / 100);
+}
+
 async function withTicketLock(guildId, operation) {
   const previous = ticketLocks.get(guildId) ?? Promise.resolve();
   let release;
@@ -585,6 +592,43 @@ async function createPartnership(interaction) {
   }
 }
 
+async function endPartnership(interaction) {
+  if (!isStaff(interaction.member)) {
+    return respondEphemeral(interaction, "Only configured staff can end partnership deals.");
+  }
+  await deferEphemeral(interaction);
+
+  const code = interaction.options.getString("code", true).trim().toUpperCase();
+  const deal = await yeti.endPartnershipDeal(code);
+  const total = formatUsdCents(deal.total_spent_cents);
+  let auditMessage = "The private partnership channel could not be found, so no channel update was posted.";
+
+  if (interaction.guild && deal.partner_channel_id) {
+    const channel = await interaction.guild.channels.fetch(deal.partner_channel_id).catch(() => null);
+    if (channel?.isTextBased()) {
+      await channel.send({
+        content: `${staffMention()}`,
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xef4444)
+            .setTitle("YetiThumbs partnership ended")
+            .setDescription("This partnership code is now disabled for future signups. The channel remains available as a sales record.")
+            .addFields(
+              { name: "Code", value: `\`${deal.code}\``, inline: true },
+              { name: "Final sales total", value: `${total} USD`, inline: true },
+            ),
+        ],
+      });
+      auditMessage = `A final sales update was posted in ${channel}.`;
+    }
+  }
+
+  return respondEphemeral(
+    interaction,
+    `Ended partnership **${deal.code}**. New redemptions are disabled. Final tracked sales total: **${total} USD**. ${auditMessage}`,
+  );
+}
+
 async function closeTicket(interaction) {
   if (!isStaff(interaction.member)) {
     return respondEphemeral(interaction, "Only configured staff can close tickets.");
@@ -682,6 +726,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.commandName === "grant-premium") return await grantPremium(interaction);
       if (interaction.commandName === "create-link") return await createPromoLink(interaction);
       if (interaction.commandName === "create-partnership") return await createPartnership(interaction);
+      if (interaction.commandName === "end-partnership") return await endPartnership(interaction);
       return;
     }
     if (interaction.isStringSelectMenu()) {
