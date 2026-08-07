@@ -36,6 +36,11 @@ export function isTicketForUser(channel, userId) {
   return String(channel?.topic ?? "").includes(`yetithumbs:user=${userId};`);
 }
 
+export function partnershipPartnerId(partner) {
+  const id = String(partner?.id ?? "").trim();
+  return id || null;
+}
+
 export function isMissingRpc(error) {
   return ["PGRST202", "42883"].includes(error?.code);
 }
