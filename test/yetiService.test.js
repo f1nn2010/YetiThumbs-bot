@@ -144,6 +144,33 @@ test("account lookup rejects a malformed email before calling Supabase Auth", as
   assert.equal(authCalls, 0);
 });
 
+test("partnership codes reject characters Stripe checkout cannot accept", async () => {
+  let databaseCalls = 0;
+  const service = createYetiService(config, {
+    supabase: {
+      from() {
+        databaseCalls += 1;
+        throw new Error("database should not be called");
+      },
+    },
+  });
+
+  await assert.rejects(
+    service.createPartnershipDeal({
+      code: "PARTNER_20",
+      percentOff: 20,
+      durationMonths: 1,
+      partnerId: null,
+      guildId: "guild-1",
+      channelId: "channel-1",
+      webhookUrl: "https://discord.test/webhook",
+      createdBy: "staff-1",
+    }),
+    (error) => /so Stripe can accept it/.test(error.message),
+  );
+  assert.equal(databaseCalls, 0);
+});
+
 test("ending a partnership disables future redemptions but keeps its tracked sales total", async () => {
   const calls = [];
   const existing = {
