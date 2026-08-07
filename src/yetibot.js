@@ -465,10 +465,10 @@ async function createPromoLink(interaction) {
         `Redeem **${result.credits} credits** on a YetiThumbs account.`,
       )
       .addFields(
-        { name: "How it works", value: "Open the link, create or sign in to your account, and the benefit is applied automatically.", inline: false },
+        { name: "How it works", value: "Open the link, create or sign in to your account, and the benefit is applied automatically. Each account can redeem this link once.", inline: false },
         { name: "Availability", value: result.max_uses ? `${result.max_uses} total redemption(s)` : "No redemption limit", inline: true },
       )
-      .setFooter({ text: "YetiThumbs • secure one-time redemption" });
+      .setFooter({ text: "YetiThumbs • once per account" });
     return respondEphemeral(
       interaction,
       {
