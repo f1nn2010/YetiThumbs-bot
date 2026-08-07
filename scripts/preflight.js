@@ -77,6 +77,19 @@ if (config.guildId) {
     console.warn("Warning: DISCORD_TICKET_CATEGORY_ID is unset; tickets will be created at the server root.");
   }
 
+  if (config.partnershipCategoryId) {
+    const category = channels.find((channel) => channel.id === config.partnershipCategoryId);
+    if (!category) {
+      throw new Error("DISCORD_PARTNERSHIP_CATEGORY_ID does not exist in the configured guild");
+    }
+    if (category.type !== 4) {
+      throw new Error("DISCORD_PARTNERSHIP_CATEGORY_ID is not a Discord category");
+    }
+    console.log(`Partnership category OK: ${category.name}`);
+  } else {
+    console.log("Partnership category is automatic: YetiThumbs Partnerships.");
+  }
+
   const [guildCommands, globalCommands] = await Promise.all([
     discord(`/applications/${config.clientId}/guilds/${config.guildId}/commands`),
     discord(`/applications/${config.clientId}/commands`),
@@ -84,6 +97,7 @@ if (config.guildId) {
   const expected = [
     "create-link",
     "create-partnership",
+    "end-partnership",
     "grant-credits",
     "grant-premium",
     "setup-tickets",
