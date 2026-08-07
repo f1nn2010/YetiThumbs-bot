@@ -271,7 +271,12 @@ export function createYetiService(config, options = {}) {
 
     const { error: profileError } = await supabase
       .from("yetithumbs_profiles")
-      .select("id, plan_source, manual_plan_expires_at")
+      // Every field below is used by the grant and dashboard reconciliation
+      // flows. Check all of them at boot so an old partial migration cannot
+      // report the bot as healthy and then grant an unusable plan.
+      .select(
+        "id, plan, credits, credits_reset_at, plan_source, manual_plan, manual_plan_source, manual_plan_expires_at",
+      )
       .limit(1);
 
     if (profileError) {
@@ -302,13 +307,29 @@ export function createYetiService(config, options = {}) {
         },
         expected: "Unsupported plan",
       },
+      {
+        // This is a non-mutating probe: the all-zero UUID cannot match a
+        // profile. It proves that the live function accepts the real maximum
+        // charge for four 4K thumbnails (4 x 3 credits).
+        name: "consume_yetithumbs_credits",
+        args: {
+          p_user_id: "00000000-0000-0000-0000-000000000000",
+          p_amount: 12,
+        },
+        expectedResult: false,
+      },
     ];
 
     for (const probe of rpcProbes) {
-      const { error } = await supabase.rpc(probe.name, probe.args);
+      const { data, error } = await supabase.rpc(probe.name, probe.args);
       const expectedRejection =
-        error && !isMissingRpc(error) && error.message?.includes(probe.expected);
-      if (!expectedRejection) {
+        probe.expected &&
+        error &&
+        !isMissingRpc(error) &&
+        error.message?.includes(probe.expected);
+      const expectedResult =
+        "expectedResult" in probe && !error && data === probe.expectedResult;
+      if (!expectedRejection && !expectedResult) {
         return {
           ok: false,
           entitlementSchemaReady: false,
