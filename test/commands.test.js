@@ -8,11 +8,18 @@ test("the bot publishes the intended guild commands", () => {
     [
       "create-link",
       "create-partnership",
+      "end-partnership",
       "grant-credits",
       "grant-premium",
       "setup-tickets",
     ],
   );
+});
+
+test("end-partnership requires the code being ended", () => {
+  const command = commands.find((item) => item.name === "end-partnership");
+  assert.deepEqual(command.options.map((option) => option.name), ["code"]);
+  assert.equal(command.options[0].required, true);
 });
 
 test("create-link exposes credit controls only", () => {
