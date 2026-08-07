@@ -248,7 +248,7 @@ export function createYetiService(config, options = {}) {
         duration_months: durationMonths,
         credits: null,
         created_by_discord_id: String(createdBy),
-        partner_discord_id: String(partnerId),
+        partner_discord_id: partnerId ? String(partnerId) : null,
         partner_guild_id: String(guildId),
         partner_channel_id: String(channelId),
         discord_webhook_url: String(webhookUrl),
@@ -273,7 +273,6 @@ export function createYetiService(config, options = {}) {
       .select("id, code, partner_discord_id, partner_channel_id, total_spent_cents, expires_at")
       .eq("code", normalizedCode)
       .eq("kind", "discount")
-      .not("partner_discord_id", "is", null)
       .maybeSingle();
 
     if (lookupError) throw fail(`Partnership lookup failed: ${lookupError.message}`, lookupError);
