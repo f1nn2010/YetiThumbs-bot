@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addCalendarMonths, nextTicketNumber, ticketTopic, isTicketForUser } from "../src/domain.js";
+import {
+  addCalendarMonths,
+  isTicketForUser,
+  nextTicketNumber,
+  partnershipPartnerId,
+  ticketTopic,
+} from "../src/domain.js";
 import {
   cleanEnv,
   isDiscordId,
@@ -143,4 +149,10 @@ test("ticket topics identify the owning user", () => {
   const channel = { topic: ticketTopic("123", "support") };
   assert.equal(isTicketForUser(channel, "123"), true);
   assert.equal(isTicketForUser(channel, "456"), false);
+});
+
+test("partnerships accept an omitted partner without dereferencing it", () => {
+  assert.equal(partnershipPartnerId(null), null);
+  assert.equal(partnershipPartnerId(undefined), null);
+  assert.equal(partnershipPartnerId({ id: "1532481208490131647" }), "1532481208490131647");
 });
