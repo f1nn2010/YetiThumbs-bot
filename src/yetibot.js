@@ -20,6 +20,7 @@ import { loadConfig } from "./config.js";
 import {
   isTicketForUser,
   nextTicketNumber,
+  partnershipPartnerId,
   ticketTopic,
 } from "./domain.js";
 import {
@@ -140,12 +141,12 @@ async function setupTickets(interaction) {
     .addOptions(
       new StringSelectMenuOptionBuilder()
         .setLabel("Support")
-        .setEmoji("🛠️")
+        .setEmoji("ðŸ› ï¸")
         .setDescription("Account help, bugs, and questions")
         .setValue("support"),
       new StringSelectMenuOptionBuilder()
         .setLabel("Buy with Robux")
-        .setEmoji("💎")
+        .setEmoji("ðŸ’Ž")
         .setDescription("Credits or Starter, Developer, and Enterprise premium")
         .setValue("robux"),
     );
@@ -162,7 +163,7 @@ function closeButton() {
     new ButtonBuilder()
       .setCustomId("close_ticket_btn")
       .setLabel("Close ticket")
-      .setEmoji("🔒")
+      .setEmoji("ðŸ”’")
       .setStyle(ButtonStyle.Danger),
   );
 }
@@ -290,7 +291,7 @@ async function selectPurchaseType(interaction) {
   const type = interaction.values[0];
   if (type === "credits") {
     const prices = Object.values(config.creditPackages).map(
-      (item) => `• **${item.label}:** ${formatRobux(item.price)}`,
+      (item) => `â€¢ **${item.label}:** ${formatRobux(item.price)}`,
     );
     return interaction.update({
       embeds: [
@@ -306,7 +307,7 @@ async function selectPurchaseType(interaction) {
   if (type === "premium") {
     const levels = Object.values(config.premiumPlans).map(
       (plan) =>
-        `• **${plan.label}:** ${plan.credits} credits/month · ${formatMonthlyRobux(plan.monthlyRobuxPrice)}`,
+        `â€¢ **${plan.label}:** ${plan.credits} credits/month Â· ${formatMonthlyRobux(plan.monthlyRobuxPrice)}`,
     );
     return interaction.update({
       embeds: [
@@ -468,7 +469,7 @@ async function createPromoLink(interaction) {
         { name: "How it works", value: "Open the link, create or sign in to your account, and the benefit is applied automatically. Each account can redeem this link once.", inline: false },
         { name: "Availability", value: result.max_uses ? `${result.max_uses} total redemption(s)` : "No redemption limit", inline: true },
       )
-      .setFooter({ text: "YetiThumbs • once per account" });
+      .setFooter({ text: "YetiThumbs â€¢ once per account" });
     return respondEphemeral(
       interaction,
       {
@@ -496,6 +497,7 @@ async function createPartnership(interaction) {
   const code = interaction.options.getString("code", true).trim().toUpperCase();
   const percentOff = interaction.options.getInteger("percent", true);
   const partner = interaction.options.getUser("partner");
+  const partnerId = partnershipPartnerId(partner);
   const durationMonths = interaction.options.getInteger("months") ?? 1;
   const safeCode = code.toLowerCase().replace(/[^a-z0-9_-]/g, "-").slice(0, 70);
   const channelName = `partnership-${safeCode}`;
@@ -585,7 +587,7 @@ async function createPartnership(interaction) {
       name: channelName,
       type: ChannelType.GuildText,
       parent: partnershipCategory.id,
-      topic: `YetiThumbs partnership ${code}${partner ? ` for ${partner.id}` : ""}`,
+      topic: `YetiThumbs partnership ${code}${partnerId ? ` for ${partnerId}` : ""}`,
       permissionOverwrites,
       reason: `Partnership deal ${code} created by ${interaction.user.tag}`,
     });
@@ -594,7 +596,7 @@ async function createPartnership(interaction) {
       code,
       percentOff,
       durationMonths,
-      partnerId: partner.id,
+      partnerId,
       guildId: interaction.guild.id,
       channelId: channel.id,
       webhookUrl: webhook.url,
