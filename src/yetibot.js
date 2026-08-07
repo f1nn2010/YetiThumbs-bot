@@ -100,7 +100,11 @@ async function registerCommands() {
   );
   // Guild commands appear immediately; clear any stale global commands.
   await rest.put(Routes.applicationCommands(config.clientId), { body: [] });
-  console.log(`Registered ${commands.length} commands in guild ${config.guildId}`);
+  console.log(
+    `Registered ${commands.length} commands in guild ${config.guildId}: ${commands
+      .map((command) => `/${command.name}`)
+      .join(", ")}`,
+  );
 }
 
 async function setupTickets(interaction) {
